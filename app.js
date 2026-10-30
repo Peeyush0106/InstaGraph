@@ -74,6 +74,18 @@
     return nestedText(caption).trim();
   }
 
+  function accessibilityTextOf(object) {
+    const direct = firstValue(object, ['accessibility_caption', 'alt_text', 'accessibility_text', 'accessibility_description', 'altText']);
+    if (typeof direct === 'string' && direct.trim()) return direct.trim();
+    const info = object?.accessibility_info ?? object?.accessibility ?? object?.accessibility_data;
+    if (typeof info === 'string' && info.trim()) return info.trim();
+    if (isObject(info)) {
+      const nested = firstValue(info, ['accessibility_caption', 'alt_text', 'accessibility_text', 'description', 'text', 'label']);
+      if (typeof nested === 'string' && nested.trim()) return nested.trim();
+    }
+    return '';
+  }
+
   function safeUrl(value) {
     if (typeof value !== 'string') return '';
     try {
@@ -620,7 +632,7 @@
       commentsCount: firstValue(object, ['comment_count', 'edge_media_to_parent_comment', 'edge_media_to_comment'])?.count ?? firstValue(object, ['comment_count', 'comments_count']),
       views: firstValue(object, ['view_count', 'viewer_count', 'play_count', 'video_view_count']),
       location: findLocation(object),
-      accessibility: safeText(firstValue(object, ['accessibility_caption', 'alt_text', 'accessibility_text'])) || safeText(firstValue(object?.accessibility_info, ['accessibility_caption', 'alt_text'])),
+      accessibility: accessibilityTextOf(object) || inherited.accessibility || '',
       audio: audioInfo(object),
       sponsorship: sponsorshipInfo(object),
       remix: remixInfo(object),
@@ -647,7 +659,8 @@
       instagramFields: instagramFieldsOf(object),
       family: storyFeed.storyFeedMention && productType.toLowerCase().includes('clips') ? 'reel' : rootFamily,
       storyFeedMention: storyFeed.storyFeedMention === true,
-      videoDuration: Number(object?.video_duration) || 0
+      videoDuration: Number(object?.video_duration) || 0,
+      accessibility: accessibilityTextOf(object)
     };
   }
 
@@ -762,6 +775,7 @@
             timestamp: timestampOf(candidate) || storyContextTimes.get(candidate) || childMedia.timestamp,
             permalink: safeUrl(firstValue(candidate, ['permalink', 'permalink_url'])) || childMedia.permalink,
             type: 'Carousel',
+            accessibility: accessibilityTextOf(candidate) || childMedia.accessibility,
             storyFeedMention: mediaContext.storyFeedMention || childMedia.storyFeedMention,
             storyFeedMentions: [...childMedia.storyFeedMentions, ...storyFeedReferences(candidate)],
             instagramFields: { ...childMedia.instagramFields, ...mediaContext.instagramFields, ...instagramFieldsOf(candidate) },
