@@ -388,8 +388,18 @@
     const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', day: '2-digit', month: 'short', year: 'numeric' }).formatToParts(date);
     const part = (type) => parts.find((entry) => entry.type === type)?.value ?? '';
     const display = `${part('hour')}:${part('minute')}, ${part('day')} ${part('month')}, ${part('year')}`;
-    const note = inferred ? 'estimated from 24-hour story expiry, ' : '';
-    return { seconds, milliseconds, inferred, display: `${display} (${note}UNIX Timestamp ${seconds})` };
+    return { seconds, milliseconds, inferred, display };
+  }
+
+  function reportTimestamp(value) {
+    if (!value?.milliseconds) return '';
+    const date = new Date(value.milliseconds);
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit',
+      day: '2-digit', month: 'short', year: 'numeric', hourCycle: 'h23'
+    }).formatToParts(date);
+    const part = (type) => parts.find((entry) => entry.type === type)?.value ?? '';
+    return `${part('hour')}:${part('minute')}, ${part('day')} ${part('month')}, ${part('year')} (UNIX: ${value.seconds})`;
   }
 
   function timestampOf(object) {
@@ -517,7 +527,7 @@
     ai_label_info: 'AI label details', carousel_media: 'Carousel media details',
     reshared_story_media_author: 'Author of reshared story media', has_liked: 'Liked by viewer',
     viewer_count: 'Viewer count', carousel_media_count: 'Carousel item count',
-    expiring_at: 'Expires at', is_paid_partnership: 'Paid partnership',
+    expiring_at: 'Story expires at', is_paid_partnership: 'Paid partnership',
     sponsor_tags: 'Sponsor tags', wearable_attribution_info: 'Wearable attribution details',
     has_translation: 'Translation available', boosted_status: 'Boost status',
     boost_unavailable_reason: 'Why boosting is unavailable', can_reply: 'Can viewers reply',
@@ -531,11 +541,6 @@
   function reportFieldValue(field, value) {
     if (['has_audio', 'has_liked', 'has_translation', 'is_paid_partnership', 'can_reply', 'seen'].includes(field) && typeof value === 'boolean') {
       return value ? 'Yes' : 'No';
-    }
-    if (field === 'expiring_at' && (typeof value === 'number' || /^\d{10,13}$/.test(String(value)))) {
-      const numeric = Number(value);
-      const date = new Date(numeric < 1e12 ? numeric * 1000 : numeric);
-      if (!Number.isNaN(date.getTime())) return new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Kolkata' }).format(date);
     }
     return value;
   }
@@ -961,33 +966,33 @@
         addLine('Bio', author.biography);
         addLine('Website', author.website);
       }
-      addLine('Posted at', post.timestamp?.display);
+      addLine('Posted at', reportTimestamp(post.timestamp));
+      addLine('Media type', post.type);
       addLine('Caption', post.caption);
       addLine('Mentions', post.mentions, 'names');
       addLine('Tagged accounts / collaborators', post.tagged, 'names');
       addLine('Hashtags', post.hashtags.map((tag) => `#${tag}`));
-      addLine('Media type', post.type);
+      addStoryFeedLinks(lines, post.storyFeedMentions);
+      addLine('Accessibility text', post.accessibility);
+      addLine('Location', post.location);
+      addLine('Video duration', post.duration ? `${post.duration} seconds` : '');
+      addLine('Audio / music', post.audio);
       addLine('Likes', displayNumber(post.likes));
       addLine('Comments', displayNumber(post.commentsCount));
       addLine('Views / plays', displayNumber(post.views));
-      addLine('Location', post.location);
-      addLine('Accessibility text', post.accessibility);
-      addLine('Video duration', post.duration ? `${post.duration} seconds` : '');
-      addLine('Audio / music', post.audio);
       addLine('Paid partnership / sponsor', post.sponsorship);
       addLine('Remix source', post.remix);
       addLine('Comments disabled', typeof post.commentsDisabled === 'boolean' ? (post.commentsDisabled ? 'Yes' : 'No') : '');
       addLine('Like / view counts hidden', typeof post.likeCountsHidden === 'boolean' ? (post.likeCountsHidden ? 'Yes' : 'No') : '');
       addLine('Product type', post.productType === 'Not provided' ? '' : post.productType);
       addLine('Top-level comment text', post.comments, 'comments');
-      addLine('Story expires at', post.storyExpiry?.display);
-      addStoryFeedLinks(lines, post.storyFeedMentions);
       const nullFields = [];
       for (const [field, value] of Object.entries(post.instagramFields ?? {})) {
         if (value === null) {
           nullFields.push(reportFieldLabel(field));
           continue;
         }
+        if (field === 'expiring_at') continue;
         if (field === 'story_music_stickers') {
           addLine('Story music', musicStickerSummary(value));
           continue;
@@ -998,6 +1003,13 @@
           continue;
         }
         addLine(reportFieldLabel(field), reportValue(reportFieldValue(field, value)));
+      }
+      if (post.instagramFields?.story_music_stickers && !musicStickerSummary(post.instagramFields.story_music_stickers)) {
+        addLine('Story music', 'Music details unavailable');
+      }
+      if (post.storyExpiry || post.instagramFields?.expiring_at) {
+        const expiry = post.storyExpiry ?? timestampFromValue(post.instagramFields.expiring_at);
+        addLine('Story expires at', reportTimestamp(expiry));
       }
       if (nullFields.length) addLine('No data available', `${nullFields.join(', ')}: null`);
       section.append(lines);
@@ -1282,7 +1294,7 @@
         mediaId: post.id,
         shortcode: post.shortcode,
         permalink: post.permalink || null,
-        postedAt: post.timestamp ? { localDisplay: post.timestamp.display, unixSeconds: post.timestamp.seconds, isoUtc: new Date(post.timestamp.milliseconds).toISOString(), estimatedFromStoryExpiry: post.timestamp.inferred === true } : null,
+        postedAt: post.timestamp ? { localDisplay: reportTimestamp(post.timestamp), unixSeconds: post.timestamp.seconds, isoUtc: new Date(post.timestamp.milliseconds).toISOString(), estimatedFromStoryExpiry: post.timestamp.inferred === true } : null,
         author: post.author ? { username: post.author.username || null, fullName: post.author.fullName || null, userId: post.author.id || null } : null,
         caption: post.caption || null,
         mentions: post.mentions,
@@ -1327,7 +1339,7 @@
           mediaFiles: data.assets.filter((asset) => asset.storyFeedMention && asset.shortcode === reference.shortcode).map((asset) => mediaFilename(asset))
         })),
         topLevelComments: post.comments,
-        storyExpiresAt: post.storyExpiry?.display || null
+        storyExpiresAt: post.storyExpiry ? reportTimestamp(post.storyExpiry) : post.instagramFields?.expiring_at ? reportTimestamp(timestampFromValue(post.instagramFields.expiring_at)) : null
       })),
       media: mediaEntries
     };
