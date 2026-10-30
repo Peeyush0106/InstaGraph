@@ -759,6 +759,20 @@
       }
       return { candidate, media };
     }).filter((entry) => entry.media);
+    const storySignatures = new Set(detailCandidates
+      .filter(({ media }) => media.family === 'story')
+      .flatMap(({ candidate, media }) => [
+        media.id,
+        safeText(firstValue(candidate, ['id', 'pk', 'media_id'])),
+        media.shortcode,
+        safeText(firstValue(candidate, ['code', 'shortcode', 'short_code'])),
+        media.variant.url,
+        ...media.imageVariants.map((variant) => variant.url),
+        ...media.videoVariants.map((variant) => variant.url)
+      ].filter(Boolean)));
+    const storyTimeKeys = new Set(detailCandidates
+      .filter(({ media }) => media.family === 'story' && media.timestamp?.seconds)
+      .map(({ media }) => `${media.author?.id || media.author?.username || ''}:${media.timestamp.seconds}`));
     const posts = [];
     const seenPosts = new Set();
     // Sidecar children are attachments within a carousel post, not separate posts.
@@ -769,6 +783,19 @@
     for (const { candidate, media } of detailCandidates) {
       // Story feed media is an attachment/reference inside the story, not an item authored by the story owner.
       if (media.storyFeedMention) continue;
+      // Some story responses expose an image rendition as a separate generic POST candidate.
+      // If that rendition belongs to an already recognized story, keep the story as the sole item.
+      const candidateUrls = getMediaSources(candidate);
+      const candidateId = safeText(firstValue(candidate, ['id', 'pk', 'media_id']));
+      const candidateCode = safeText(firstValue(candidate, ['code', 'shortcode', 'short_code']));
+      const candidateTimeKey = `${media.author?.id || media.author?.username || ''}:${media.timestamp?.seconds || ''}`;
+      if (media.family === 'post' && (
+        (candidateId && storySignatures.has(candidateId))
+        || (candidateCode && storySignatures.has(candidateCode))
+        || (media.timestamp?.inferred === true && storyTimeKeys.has(candidateTimeKey))
+        || [media.variant.url, ...candidateUrls.images.map((variant) => variant.url), ...candidateUrls.videos.map((variant) => variant.url)]
+          .some((url) => storySignatures.has(url))
+      )) continue;
       if (carouselChildItems.has(candidate) || sidecarChildIds.has(media.id) || sidecarChildUrls.has(media.variant.url)) continue;
       const isContainer = sidecarNodes(candidate).length > 0;
       const itemKey = safeText(firstValue(candidate, ['id', 'pk', 'media_id', 'code', 'shortcode'])) || media.variant.url;
