@@ -1059,9 +1059,10 @@
         if (field === 'reshared_story_media_author' && isObject(value)) {
           const username = getUsername(value);
           if (username) {
-            const profile = value.user ?? value.owner ?? value.author ?? value;
-            const avatarUrl = safeUrl(firstValue(value, ['profile_pic_url', 'profile_pic_url_hd', 'profile_picture_url', 'profilePictureUrl'])
-              ?? firstValue(profile, ['profile_pic_url', 'profile_pic_url_hd', 'profile_picture_url', 'profilePictureUrl']));
+            const avatarKeys = ['profile_pic_url', 'profile_pic_url_hd', 'profile_picture_url', 'profilePictureUrl'];
+            const avatarUrl = allObjects(value)
+              .map((record) => safeUrl(firstValue(record, avatarKeys)))
+              .find(Boolean) || '';
             const line = element('div', 'report-line');
             line.append(element('strong', '', `${reportFieldLabel(field)}: `));
             const chip = element('a', 'profile-chip', `@${username}`);
@@ -1069,17 +1070,23 @@
             chip.target = '_blank';
             chip.rel = 'noopener noreferrer';
             chip.setAttribute('aria-label', `Open Instagram profile for @${username} in a new tab`);
+            const avatarWrap = element('span', 'profile-avatar');
+            const fallback = element('span', 'profile-avatar-fallback', username.slice(0, 1).toUpperCase());
+            fallback.setAttribute('aria-hidden', 'true');
+            avatarWrap.append(fallback);
             if (avatarUrl) {
               const avatar = document.createElement('img');
               avatar.src = avatarUrl;
               avatar.alt = '';
-              avatar.width = 26;
-              avatar.height = 26;
+              avatar.width = 34;
+              avatar.height = 34;
               avatar.loading = 'lazy';
               avatar.referrerPolicy = 'no-referrer';
-              avatar.addEventListener('error', () => avatar.remove(), { once: true });
-              chip.prepend(avatar);
+              avatar.addEventListener('load', () => { fallback.hidden = true; }, { once: true });
+              avatar.addEventListener('error', () => { avatar.hidden = true; }, { once: true });
+              avatarWrap.append(avatar);
             }
+            chip.prepend(avatarWrap);
             line.append(chip);
             lines.append(line);
           } else {
