@@ -4,3 +4,38 @@
 @media(max-width:520px){.app-shell{padding:0 15px}.topbar{height:59px}.brand{font-size:16px}.topbar-right{font-size:9px}.privacy-dot{width:6px;height:6px}.intro{padding:45px 0 37px}.intro-stamp{display:none}.eyebrow{font-size:9px;margin-bottom:16px}h1{font-size:43px;letter-spacing:-2.5px}.serif-accent{letter-spacing:-2px}.intro-text{font-size:12px;line-height:1.65}.input-section{padding:16px 14px}.input-heading-row{align-items:flex-start;gap:10px}.input-heading-row h2{font-size:18px}.input-heading-row p{font-size:11px}.file-button{font-size:0;padding:9px}.file-button svg{width:17px;height:17px}.editor-wrap{min-height:220px}.editor-wrap textarea{min-height:218px;padding:14px 12px;font-size:11px}.editor-gutter{width:39px}.input-footer{align-items:flex-start;gap:10px;flex-direction:column}.input-note{font-size:10px}.input-actions{width:100%;justify-content:flex-end}.results-heading h2{font-size:25px}.results-subtitle{line-height:1.5}.report-download{gap:9px;padding:9px}.report-file-copy{min-width:0}.report-file-copy span{font-size:9px}.button-dark{font-size:10px;padding:9px}.stat-card{min-height:95px;padding:13px}.stat-card strong{font-size:24px}.stat-card>div{align-items:flex-start;flex-direction:column;gap:0}.stat-index{right:12px;top:12px}.media-panel,.report-panel{padding:16px}.media-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.media-actions{gap:4px}.media-download,.media-open{padding:6px;font-size:9px}.panel-heading h3{font-size:17px}.panel-description{font-size:10px;line-height:1.5}.media-heading-actions{gap:8px}.text-button{font-size:9px}.count-pill{font-size:9px;padding:5px 7px}.capabilities{padding:57px 0 45px}.capabilities-title h2{font-size:32px}.capability-item{grid-template-columns:30px 1fr 17px;gap:4px}.capability-item div span{font-size:10px}.footer{gap:12px;align-items:flex-start;flex-direction:column}.footer span:last-child{font-size:9px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}}
 .result-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap}.package-button{white-space:nowrap;font-size:11px}.package-button svg{flex:none}@media(max-width:760px){.result-actions{width:100%;flex-direction:column;align-items:stretch}.result-actions .report-download{align-self:stretch}.result-actions .package-button{width:100%}}
+
+/* Compact functional view */
+.mode-toggle{position:fixed;right:22px;bottom:22px;z-index:20;min-width:112px;padding:11px 16px;border:1px solid #294332;border-radius:999px;background:#294332;color:#fff;font:600 12px var(--sans);box-shadow:0 5px 20px #14231b2e;cursor:pointer;transition:background .18s ease,transform .18s ease,box-shadow .18s ease}
+.mode-toggle:hover{background:#203729;transform:translateY(-2px);box-shadow:0 8px 24px #14231b38}
+.mode-toggle:focus-visible{outline:3px solid #91b99a;outline-offset:3px}
+body.pro-mode{--paper:#f1f3f1;font-size:13px}
+.pro-mode .app-shell{max-width:1500px;padding:0 28px}
+.pro-mode .topbar,.pro-mode .intro,.pro-mode .capabilities,.pro-mode .footer{display:none}
+.pro-mode main{padding:18px 0 78px}
+.pro-mode .input-section{padding:12px 16px;box-shadow:none}
+.pro-mode .section-heading{margin:0}
+.pro-mode .section-heading>.step-label,.pro-mode .input-heading-row>div{display:none}
+.pro-mode .input-heading-row{justify-content:flex-end;margin:0}
+.pro-mode .input-heading-row .file-button{margin-left:auto}
+.pro-mode .editor-gutter{display:none}
+.pro-mode .editor-wrap,.pro-mode .editor-wrap textarea{min-height:170px}
+.pro-mode .editor-wrap textarea{padding:12px 14px}
+.pro-mode .input-footer{padding-top:10px}
+.pro-mode .input-note{font-size:10px}
+.pro-mode .results-section{padding-top:22px}
+.pro-mode .results-heading{margin-bottom:12px}
+.pro-mode .results-heading>div:first-child{display:none}
+.pro-mode .result-actions{width:100%;justify-content:flex-end}
+.pro-mode .stat-row{margin-bottom:12px}
+.pro-mode .stat-card{min-height:75px;padding:11px 14px}
+.pro-mode .results-grid{gap:12px}
+.pro-mode .media-panel,.pro-mode .report-panel{min-height:0;padding:15px}
+.pro-mode .panel-overline,.pro-mode .panel-heading h3,.pro-mode .report-live,.pro-mode .panel-description,.pro-mode .download-note{display:none}
+.pro-mode .panel-heading{min-height:32px}
+.pro-mode .report-preview{margin-top:0;max-height:calc(100vh - 190px)}
+.pro-mode .report-section{padding:9px 0}
+.pro-mode .report-section h4{font-size:9px;margin-bottom:6px}
+.pro-mode .report-lines{gap:5px}
+.pro-mode .report-line{font-size:12px}
+@media(max-width:760px){.pro-mode .app-shell{padding:0 15px}.pro-mode main{padding-top:10px}.pro-mode .results-grid{grid-template-columns:1fr}.pro-mode .results-heading{display:block}.pro-mode .report-preview{max-height:none}.pro-mode .result-actions{align-items:stretch}.mode-toggle{right:14px;bottom:14px}}

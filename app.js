@@ -7,8 +7,24 @@
   const dropZone = $('#drop-zone');
   const errorBox = $('#input-error');
   const toast = $('#toast');
+  const modeToggle = $('#mode-toggle');
   let extracted = null;
   let toastTimer = 0;
+
+  function setProMode(enabled) {
+    document.body.classList.toggle('pro-mode', enabled);
+    modeToggle.textContent = enabled ? 'Normal mode' : 'Pro Mode';
+    modeToggle.setAttribute('aria-pressed', String(enabled));
+    const action = enabled ? 'Switch to Normal mode' : 'Switch to Pro Mode';
+    modeToggle.setAttribute('aria-label', action);
+    modeToggle.title = action;
+    try { localStorage.setItem('instagraph-view-mode', enabled ? 'pro' : 'normal'); } catch { /* Storage may be disabled. */ }
+  }
+
+  let savedMode = 'normal';
+  try { savedMode = localStorage.getItem('instagraph-view-mode') || 'normal'; } catch { /* Storage may be disabled. */ }
+  setProMode(savedMode === 'pro');
+  modeToggle.addEventListener('click', () => setProMode(!document.body.classList.contains('pro-mode')));
 
   const safeText = (value) => value === null || value === undefined || value === '' ? '' : String(value);
   const unique = (values) => [...new Set(values.filter(Boolean))];
