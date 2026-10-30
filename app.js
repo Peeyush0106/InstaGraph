@@ -528,6 +528,20 @@
     return value;
   }
 
+  function musicStickerSummary(value) {
+    const records = (Array.isArray(value) ? value : [value]).filter(isObject);
+    const details = records.map((record) => {
+      const info = record.music_asset_info ?? record.musicAssetInfo ?? record;
+      const title = safeText(firstValue(info, ['title', 'track_title', 'song_name']));
+      const artist = safeText(firstValue(info, ['display_artist', 'artist_name', 'artist']));
+      const parts = [];
+      if (title) parts.push(`“${title}”`);
+      if (artist) parts.push(`by ${artist}`);
+      return parts.join(' ');
+    }).filter(Boolean);
+    return details.join('; ');
+  }
+
   function reportValue(value) {
     if (typeof value === 'string') return value;
     try { return JSON.stringify(value, null, 2) ?? String(value); } catch { return String(value); }
@@ -939,7 +953,6 @@
       addLine('Tagged accounts / collaborators', post.tagged, 'names');
       addLine('Hashtags', post.hashtags.map((tag) => `#${tag}`));
       addLine('Media type', post.type);
-      addLine('Attachments', post.attachments.map((item) => `${item.type} ${item.mediaIndex || ''}${item.dimensions.width && item.dimensions.height ? ` (${item.dimensions.width} × ${item.dimensions.height})` : ''}`.trim()));
       addLine('Likes', displayNumber(post.likes));
       addLine('Comments', displayNumber(post.commentsCount));
       addLine('Views / plays', displayNumber(post.views));
@@ -961,20 +974,18 @@
           nullFields.push(reportFieldLabel(field));
           continue;
         }
+        if (field === 'story_music_stickers') {
+          addLine('Story music', musicStickerSummary(value));
+          continue;
+        }
+        if (field === 'sharing_friction_info' && isObject(value)) {
+          const meaningful = Object.fromEntries(Object.entries(value).filter(([key, nested]) => key !== 'bloks_app_url' && !/mute/i.test(key) && nested !== null));
+          if (Object.keys(meaningful).length) addLine(reportFieldLabel(field), Object.entries(meaningful).map(([key, nested]) => `${reportFieldLabel(key)}: ${reportValue(nested)}`).join('; '));
+          continue;
+        }
         addLine(reportFieldLabel(field), reportValue(reportFieldValue(field, value)));
       }
       if (nullFields.length) addLine('No data available', `${nullFields.join(', ')}: null`);
-      const attachmentAssets = data.assets.filter((asset) => post.attachments.some((attachment) =>
-        mediaIndexForAttachment(data, attachment) === asset.sourceMediaIndex));
-      addLine('Attachments', attachmentAssets.flatMap((asset, assetIndex) => {
-        const result = mediaStatuses?.[assetIndex]?.included === false ? ' (download unavailable)' : '';
-        const entries = [`${assetRole(asset)}: ${mediaFilename(asset)}${result}`];
-        for (const { variant, qualityIndex } of alternateVariantsForAsset(asset)) {
-          const status = qualityStatuses?.find((item) => item.assetIndex === assetIndex && item.qualityIndex === qualityIndex);
-          entries.push(`Lower quality: ${qualityFilename(asset, variant, qualityIndex)}${status?.included === false ? ' (download unavailable)' : ''}`);
-        }
-        return entries;
-      }));
       section.append(lines);
       preview.append(section);
     });
