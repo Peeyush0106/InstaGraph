@@ -1149,22 +1149,22 @@
           lines.push(`  Attachment ${attachmentIndex + 1}: ${attachment.type}${dimensions}`);
           if (!matchedAssets.length) {
             lines.push(`    Source: ${attachment.variant.url}`);
-            continue;
-          }
-          for (const { asset, assetIndex } of matchedAssets) {
-            const mediaStatus = mediaStatuses?.[assetIndex];
-            const statusText = mediaStatus ? mediaStatus.included ? 'included' : 'not bundled; source blocked' : 'highest-quality file';
-            const size = asset.variant.width && asset.variant.height ? ` (${asset.variant.width} × ${asset.variant.height})` : '';
-            lines.push(`    ${assetRole(asset)}: ${mediaFilename(asset)}${size} — ${statusText}`);
-            lines.push(`      Source: ${asset.variant.url}`);
-            const lowerQualities = alternateVariantsForAsset(asset).map(({ variant, qualityIndex }) => ({
-              fileName: qualityFilename(asset, variant, qualityIndex), variant, qualityIndex
-            }));
-            for (const quality of lowerQualities) {
-              const qualityStatus = qualityStatuses?.find((status) => status.assetIndex === assetIndex && status.qualityIndex === quality.qualityIndex);
-              const qualityResult = qualityStatus ? qualityStatus.included ? 'included' : 'not bundled; source blocked' : 'available in package';
-              const qualitySize = quality.variant.width && quality.variant.height ? ` (${quality.variant.width} × ${quality.variant.height})` : '';
-              lines.push(`      Lower quality: ${quality.fileName}${qualitySize} — ${qualityResult}`);
+          } else {
+            for (const { asset, assetIndex } of matchedAssets) {
+              const mediaStatus = mediaStatuses?.[assetIndex];
+              const statusText = mediaStatus ? mediaStatus.included ? 'included' : 'not bundled; source blocked' : 'highest-quality file';
+              const size = asset.variant.width && asset.variant.height ? ` (${asset.variant.width} × ${asset.variant.height})` : '';
+              lines.push(`    ${assetRole(asset)}: ${mediaFilename(asset)}${size} — ${statusText}`);
+              lines.push(`      Source: ${asset.variant.url}`);
+              const lowerQualities = alternateVariantsForAsset(asset).map(({ variant, qualityIndex }) => ({
+                fileName: qualityFilename(asset, variant, qualityIndex), variant, qualityIndex
+              }));
+              for (const quality of lowerQualities) {
+                const qualityStatus = qualityStatuses?.find((status) => status.assetIndex === assetIndex && status.qualityIndex === quality.qualityIndex);
+                const qualityResult = qualityStatus ? qualityStatus.included ? 'included' : 'not bundled; source blocked' : 'available in package';
+                const qualitySize = quality.variant.width && quality.variant.height ? ` (${quality.variant.width} × ${quality.variant.height})` : '';
+                lines.push(`      Lower quality: ${quality.fileName}${qualitySize} — ${qualityResult}`);
+              }
             }
           }
         });
