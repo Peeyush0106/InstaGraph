@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f6f2">
+  <meta name="description" content="Extract Instagram media and organized details from a GraphQL JSON response, right in your browser.">
+  <title>InstaGraph — response extractor</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="InstaGraph home">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><rect x="3" y="3" width="26" height="26" rx="8" stroke="currentColor" stroke-width="2.5"/><circle cx="16" cy="16" r="6" stroke="currentColor" stroke-width="2.5"/><circle cx="24" cy="8.5" r="1.7" fill="currentColor"/></svg></span>
+        <span>insta<span class="brand-light">graph</span></span>
+      </a>
+      <div class="topbar-right"><span class="privacy-dot"></span><span>Runs locally in your browser</span><span class="topbar-divider"></span><span class="version">GRAPHQL TOOLKIT</span></div>
+    </header>
+
+    <main id="top">
+      <section class="intro">
+        <div class="intro-copy">
+          <p class="eyebrow"><span class="eyebrow-line"></span> INSTAGRAM RESPONSE TOOL</p>
+          <h1>Turn a response into<br><span class="serif-accent">something useful.</span></h1>
+          <p class="intro-text">Drop in Instagram GraphQL JSON. Get the attached media at its best available quality and a clean, categorized record of everything the response contains.</p>
+        </div>
+        <div class="intro-stamp" aria-hidden="true"><span>IG</span><span>DATA<br>EXTRACTOR</span><svg viewBox="0 0 78 78" fill="none"><path d="M39 3v72M3 39h72M13.5 13.5l51 51m0-51-51 51" stroke="currentColor" stroke-width="1"/><circle cx="39" cy="39" r="22" stroke="currentColor" stroke-width="1"/></svg></div>
+      </section>
+
+      <section class="input-section" aria-labelledby="input-title">
+        <div class="section-heading">
+          <div class="step-label"><span>01</span><span class="step-rule"></span><span>YOUR SOURCE</span></div>
+          <div class="input-heading-row"><div><h2 id="input-title">Paste the GraphQL response</h2><p>Paste JSON or choose a saved <code>.json</code> file.</p></div><label class="button button-quiet file-button" for="file-input"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 13V3m0 0L6.5 6.5M10 3l3.5 3.5M3.5 12.5v3A1.5 1.5 0 005 17h10a1.5 1.5 0 001.5-1.5v-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Choose JSON file</label><input id="file-input" type="file" accept=".json,application/json" hidden></div>
+        </div>
+        <div class="editor-wrap" id="drop-zone">
+          <div class="editor-gutter" aria-hidden="true"><span>JSON</span><span class="gutter-dots"><i></i><i></i><i></i></span></div>
+          <textarea id="json-input" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Instagram GraphQL JSON" placeholder="Paste the full JSON response here…&#10;&#10;We look for posts, reels, stories, carousels, media variants, captions, mentions, timestamps and other fields in the response."></textarea>
+          <div class="drop-overlay"><span>Drop a .json file to load it</span></div>
+        </div>
+        <div class="input-footer">
+          <div class="input-note"><svg viewBox="0 0 18 18" fill="none" aria-hidden="true"><rect x="3.5" y="7.5" width="11" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 7.5V5a3 3 0 016 0v2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span id="file-label">Your JSON stays on this device. Nothing is uploaded.</span></div>
+          <div class="input-actions"><button id="clear-button" class="button button-quiet" type="button">Clear</button><button id="extract-button" class="button button-primary" type="button"><span>Extract data</span><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.5 10h12m0 0-4.5-4.5M15.5 10 11 14.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+        </div>
+        <p class="input-error" id="input-error" role="alert" hidden></p>
+      </section>
+
+      <section class="results-section" id="results" hidden aria-live="polite">
+        <div class="results-heading">
+          <div><div class="step-label"><span>02</span><span class="step-rule"></span><span>EXTRACTION</span></div><h2>Your files are ready<span class="period">.</span></h2><p id="result-summary" class="results-subtitle"></p></div>
+          <div class="result-actions">
+            <div class="report-download"><span class="report-file-icon">TXT</span><div class="report-file-copy"><strong>Categorized report</strong><span>.txt · mentions linked in preview</span></div><button id="report-button" class="button button-dark" type="button"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v10m0 0 4-4m-4 4L6 9m-2.5 5v2A1.5 1.5 0 005 17.5h10a1.5 1.5 0 001.5-1.5v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Download</button></div>
+            <button id="package-button" class="button button-primary package-button" type="button"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M2.5 5.5h6l1.5 1.7h7.5v8.3a1.5 1.5 0 01-1.5 1.5H4a1.5 1.5 0 01-1.5-1.5v-10z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 9.5v4m0 0 2-2m-2 2-2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Complete package (.zip)</span></button>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat-card"><span class="stat-kicker">POSTS / ITEMS</span><div><strong id="stat-posts">0</strong><span>found in response</span></div><span class="stat-index">A</span></div>
+          <div class="stat-card"><span class="stat-kicker">MEDIA FILES</span><div><strong id="stat-assets">0</strong><span>best available variant</span></div><span class="stat-index">B</span></div>
+          <div class="stat-card"><span class="stat-kicker">MENTIONS</span><div><strong id="stat-mentions">0</strong><span>unique accounts</span></div><span class="stat-index">C</span></div>
+          <div class="stat-card"><span class="stat-kicker">HASHTAGS</span><div><strong id="stat-hashtags">0</strong><span>unique tags</span></div><span class="stat-index">D</span></div>
+        </div>
+
+        <div class="results-grid">
+          <section class="media-panel panel" aria-labelledby="media-title">
+            <div class="panel-heading"><div><div class="panel-overline">ORIGINAL MEDIA</div><h3 id="media-title">Attachments</h3></div><div class="media-heading-actions"><span id="media-count" class="count-pill">0 files</span><button id="sequence-button" class="text-button" type="button" title="Save each media file one at a time">Download media <span aria-hidden="true">↗</span></button></div></div>
+            <p class="panel-description">Highest-resolution media files and available video thumbnails, saved as separate assets.</p>
+            <div id="media-list" class="media-list"></div>
+            <div id="media-empty" class="empty-media" hidden><span class="empty-glyph">◌</span><strong>No direct media URL found</strong><span>Some responses contain post details without the media source. Any available fields are still included in the report.</span></div>
+            <p class="download-note">Download media saves files one at a time; your browser may ask to allow multiple downloads. The complete package keeps media in the ZIP root and all report and JSON files in metadata/. Instagram CDNs can restrict browser downloads.</p>
+          </section>
+
+          <section class="report-panel panel" aria-labelledby="report-title">
+            <div class="panel-heading"><div><div class="panel-overline">STRUCTURED DETAILS</div><h3 id="report-title">Categorized information</h3></div><span class="report-live"><i></i> PREVIEW</span></div>
+            <div id="report-preview" class="report-preview"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="capabilities" aria-labelledby="capabilities-title">
+        <div class="capabilities-title"><div class="step-label"><span>03</span><span class="step-rule"></span><span>WHAT'S IN THERE</span></div><h2 id="capabilities-title">More than just<br><span class="serif-accent">a photo.</span></h2><p>Available fields vary by response type. InstaGraph reads what Instagram included in the JSON you provide.</p></div>
+        <div class="capability-list">
+          <div class="capability-item"><span class="cap-number">01</span><div><strong>Author &amp; account</strong><span>Username, display name, user ID, verified or private status, profile picture, and profile counts when present.</span></div><span class="cap-arrow">↗</span></div>
+          <div class="capability-item"><span class="cap-number">02</span><div><strong>Post details</strong><span>Caption, shortcode, permalink, media type, product type, and post or story timestamp with Unix time.</span></div><span class="cap-arrow">↗</span></div>
+          <div class="capability-item"><span class="cap-number">03</span><div><strong>People &amp; places</strong><span>Caption mentions, tappable objects, tagged users, collaborators, hashtags, location name, and coordinates.</span></div><span class="cap-arrow">↗</span></div>
+          <div class="capability-item"><span class="cap-number">04</span><div><strong>Media &amp; engagement</strong><span>Image dimensions, video duration and views, likes, comments, comment text, accessibility text, and audio or music metadata.</span></div><span class="cap-arrow">↗</span></div>
+          <div class="capability-item"><span class="cap-number">05</span><div><strong>Additional response fields</strong><span>Carousel order, sponsorship, remix or original-audio details, story expiry, and other metadata if included.</span></div><span class="cap-arrow">↗</span></div>
+        </div>
+      </section>
+      <footer class="footer"><span>INSTA<span class="footer-light">GRAPH</span> <span class="footer-sep">/</span> LOCAL RESPONSE EXTRACTOR</span><span>No account connection · No upload · Just your JSON</span></footer>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
