@@ -9,6 +9,7 @@ A standalone Instagram GraphQL response extractor. Open `index.html` in a modern
 - **Complete package (.zip)** creates one archive with media files in the ZIP root and all text/JSON files under `metadata/`.
 - Mentions and tagged accounts link to their Instagram profiles in the on-page preview.
 - Mentions are collected from caption text, `tappable_objects`, story `story_bloks_stickers`, and structured tagged-account data.
+- Story `story_feed_media` references with `product_type: clips` are linked using their shortcode. If the response contains video and image variants, those assets are added to the downloads and package.
 
 Media timestamps are converted to IST (`Asia/Kolkata`) before naming, and filenames follow the requested type labels:
 

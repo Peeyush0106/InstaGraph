@@ -206,6 +206,97 @@
     return uniqueAccounts(names);
   }
 
+  function storyFeedReferences(object) {
+    const references = [];
+    let storyFeedValue = object?.story_feed_media;
+    if (typeof storyFeedValue === 'string') {
+      try { storyFeedValue = JSON.parse(storyFeedValue); } catch { return references; }
+    }
+    if (!isObject(storyFeedValue)) return references;
+    const stack = [{ value: storyFeedValue, productType: '' }];
+    const seen = new WeakSet();
+    while (stack.length) {
+      const { value, productType: inheritedProductType } = stack.pop();
+      if (!isObject(value) || seen.has(value)) continue;
+      seen.add(value);
+      if (Array.isArray(value)) {
+        value.forEach((child) => stack.push({ value: child, productType: inheritedProductType }));
+        continue;
+      }
+      const productType = safeText(firstValue(value, ['product_type', 'productType']) ?? inheritedProductType).toLowerCase();
+      const rawCode = safeText(firstValue(value, ['code', 'shortcode', 'short_code']));
+      const fallbackId = safeText(firstValue(value, ['id']));
+      const code = rawCode || (/^[A-Za-z0-9_-]{5,}$/.test(fallbackId) && !/^\d+$/.test(fallbackId) ? fallbackId : '');
+      if (productType === 'clips' && code) {
+        const username = getUsername(value.owner ?? value.user ?? value.author ?? value);
+        references.push({
+          shortcode: code,
+          productType,
+          type: 'Reel',
+          username: username || null,
+          permalink: `https://www.instagram.com/p/${encodeURIComponent(code)}/`
+        });
+      }
+      for (const child of Object.values(value)) {
+        if (isObject(child)) stack.push({ value: child, productType });
+        else if (typeof child === 'string') {
+          const trimmed = child.trim();
+          if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            try { stack.push({ value: JSON.parse(trimmed), productType }); } catch { /* Ignore regular text. */ }
+          }
+        }
+      }
+    }
+    const seen = new Set();
+    return references.filter((reference) => {
+      if (seen.has(reference.shortcode)) return false;
+      seen.add(reference.shortcode);
+      return true;
+    });
+  }
+
+  function storyFeedMediaContexts(root) {
+    const contexts = new WeakMap();
+    const stack = [{ value: root, insideStoryFeed: false, context: {} }];
+    const seen = new WeakMap();
+    while (stack.length) {
+      const { value, insideStoryFeed, context } = stack.pop();
+      if (!isObject(value)) continue;
+      const bit = insideStoryFeed ? 2 : 1;
+      const previous = seen.get(value) || 0;
+      if (previous & bit) continue;
+      seen.set(value, previous | bit);
+      if (Array.isArray(value)) {
+        value.forEach((child) => stack.push({ value: child, insideStoryFeed, context }));
+        continue;
+      }
+      const nextContext = { ...context };
+      const productType = firstValue(value, ['product_type', 'productType']);
+      const shortcode = firstValue(value, ['code', 'shortcode', 'short_code']);
+      const author = value.owner ?? value.user ?? value.author ?? value.user_info;
+      const timestamp = timestampOf(value);
+      if (productType !== undefined) nextContext.productType = safeText(productType);
+      if (shortcode !== undefined) nextContext.shortcode = safeText(shortcode);
+      if (isObject(author) && getUsername(author)) nextContext.author = author;
+      if (timestamp) nextContext.timestamp = timestamp;
+      if (insideStoryFeed && hasMedia(value)) contexts.set(value, { ...nextContext, storyFeedMention: true });
+      for (const [key, child] of Object.entries(value)) {
+        if (isObject(child)) stack.push({
+          value: child,
+          insideStoryFeed: insideStoryFeed || key === 'story_feed_media',
+          context: key === 'story_feed_media' ? { ...nextContext, storyFeedMention: true } : nextContext
+        });
+        else if (typeof child === 'string') {
+          const trimmed = child.trim();
+          if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            try { stack.push({ value: JSON.parse(trimmed), insideStoryFeed: insideStoryFeed || key === 'story_feed_media', context: key === 'story_feed_media' ? { ...nextContext, storyFeedMention: true } : nextContext }); } catch { /* Ignore non-JSON text. */ }
+          }
+        }
+      }
+    }
+    return contexts;
+  }
+
   function taggedAccounts(object) {
     const names = [];
     const tags = object?.edge_media_to_tagged_user?.edges ?? object?.usertags?.in ?? object?.tagged_users ?? object?.taggedPeople ?? [];
@@ -415,9 +506,14 @@
     const timestamp = timestampOf(object) || inherited.timestamp || inferredStoryTime(object);
     const storyExpiry = storyExpiryOf(object) || inherited.storyExpiry || null;
     const pathType = String(object?.product_type ?? inherited.productType ?? '').toLowerCase();
-    const family = inherited.family === 'story' || storyExpiry || pathType === 'story' || /story/i.test(String(object?.type ?? '')) ? 'story'
+    const storyFeedMention = inherited.storyFeedMention === true;
+    const sharedClip = storyFeedMention && (pathType.includes('clips') || pathType.includes('reel') || /reel/i.test(mediaType(object, videos)));
+    const family = sharedClip ? 'reel'
+      : inherited.family === 'story' || storyExpiry || pathType === 'story' || /story/i.test(String(object?.type ?? '')) ? 'story'
       : inherited.family === 'reel' || pathType.includes('clips') || pathType.includes('reel') || /reel/i.test(mediaType(object, videos)) ? 'reel' : 'post';
-    const permalink = safeUrl(firstValue(object, ['permalink', 'permalink_url'])) || (shortcode ? `https://www.instagram.com/${pathType === 'clips' || pathType === 'reel' ? 'reel' : 'p'}/${encodeURIComponent(shortcode)}/` : '');
+    const permalink = storyFeedMention && shortcode
+      ? `https://www.instagram.com/p/${encodeURIComponent(shortcode)}/`
+      : safeUrl(firstValue(object, ['permalink', 'permalink_url'])) || (shortcode ? `https://www.instagram.com/${pathType === 'clips' || pathType === 'reel' ? 'reel' : 'p'}/${encodeURIComponent(shortcode)}/` : '');
     const duration = Number(firstValue(object, ['video_duration', 'duration']) ?? inherited.videoDuration ?? 0) || 0;
     const dimensions = object?.original_width && object?.original_height
       ? { width: Number(object.original_width), height: Number(object.original_height) }
@@ -438,8 +534,10 @@
       caption,
       timestamp,
       permalink,
-      type: mediaType(object, videos),
+      type: storyFeedMention && family === 'reel' ? 'Reel / video' : mediaType(object, videos),
       family,
+      storyFeedMention,
+      storyFeedMentions: storyFeedReferences(object),
       isVideo,
       variant,
       imageVariants: sources.images,
@@ -459,7 +557,7 @@
       remix: remixInfo(object),
       commentsDisabled: firstValue(object, ['comments_disabled', 'commenting_disabled_for_viewer']),
       likeCountsHidden: firstValue(object, ['like_and_view_counts_disabled', 'likes_disabled']),
-      productType: safeText(firstValue(object, ['product_type', 'media_type'])) || 'Not provided',
+      productType: safeText(firstValue(object, ['product_type', 'media_type']) ?? inherited.productType) || 'Not provided',
       comments: commentsOf(object),
       mediaIndex,
       containerKey: inherited.containerKey ?? null,
@@ -467,10 +565,26 @@
     };
   }
 
+  function mediaContextFor(object, fallbackAuthor, storyContextTimes, storyFeedContexts, rootFamily) {
+    const storyFeed = storyFeedContexts.get(object) ?? {};
+    const productType = safeText(firstValue(object, ['product_type']) ?? storyFeed.productType);
+    return {
+      author: mergeAccountRecords(ownerOf(object), mergeAccountRecords(storyFeed.author, fallbackAuthor)),
+      caption: captionOf(object),
+      timestamp: timestampOf(object) || storyFeed.timestamp || storyContextTimes.get(object),
+      shortcode: safeText(firstValue(object, ['code', 'shortcode', 'short_code'])) || storyFeed.shortcode || '',
+      productType,
+      family: storyFeed.storyFeedMention && productType.toLowerCase().includes('clips') ? 'reel' : rootFamily,
+      storyFeedMention: storyFeed.storyFeedMention === true,
+      videoDuration: Number(object?.video_duration) || 0
+    };
+  }
+
   function extract(json) {
     const objects = allObjects(json);
     const candidates = objects.filter(hasMedia);
     const storyContextTimes = collectStoryContextTimes(json, objects, candidates);
+    const storyFeedContexts = storyFeedMediaContexts(json);
     const responseType = detectType(json, objects);
     const rootFamily = responseType === 'Story response' ? 'story' : null;
     const results = [];
@@ -534,34 +648,32 @@
     }
     for (const candidate of candidates) {
       const children = sidecarNodes(candidate);
+      const mediaContext = mediaContextFor(candidate, fallbackAuthor, storyContextTimes, storyFeedContexts, rootFamily);
       if (children.length) {
-        const owner = ownerOf(candidate);
         const inherited = {
-          author: mergeAccountRecords(owner, fallbackAuthor),
-          caption: captionOf(candidate), timestamp: timestampOf(candidate) || storyContextTimes.get(candidate),
-          shortcode: safeText(firstValue(candidate, ['code', 'shortcode'])),
-          productType: safeText(candidate.product_type), family: rootFamily, videoDuration: Number(candidate.video_duration) || 0,
+          ...mediaContext,
           containerKey: candidate
         };
         children.forEach((child, index) => {
           const media = normalizeMedia(child, { ...inherited, carouselIndex: index + 1 });
           if (!media) return;
-          const dedupeKey = `${media.variant.kind}:${media.variant.url}`;
+          const dedupeKey = `${media.storyFeedMention ? 'story-feed' : media.family}:${media.variant.kind}:${media.variant.url}`;
           if (!seenMedia.has(dedupeKey)) { seenMedia.add(dedupeKey); results.push(media); }
         });
         continue;
       }
-      const media = normalizeMedia(candidate, { author: fallbackAuthor, timestamp: storyContextTimes.get(candidate), family: rootFamily });
+      const media = normalizeMedia(candidate, mediaContext);
       if (!media) continue;
-      const dedupeKey = `${media.variant.kind}:${media.variant.url}`;
+      const dedupeKey = `${media.storyFeedMention ? 'story-feed' : media.family}:${media.variant.kind}:${media.variant.url}`;
       if (!seenMedia.has(dedupeKey)) { seenMedia.add(dedupeKey); results.push(media); }
     }
 
     const detailCandidates = candidates.map((candidate) => {
-      let media = normalizeMedia(candidate, { author: fallbackAuthor, timestamp: storyContextTimes.get(candidate), family: rootFamily });
+      const mediaContext = mediaContextFor(candidate, fallbackAuthor, storyContextTimes, storyFeedContexts, rootFamily);
+      let media = normalizeMedia(candidate, mediaContext);
       const children = sidecarNodes(candidate);
       if (!media && children.length) {
-        const childMedia = children.map((child, index) => normalizeMedia(child, { author: fallbackAuthor, carouselIndex: index + 1, family: rootFamily })).find(Boolean);
+        const childMedia = children.map((child, index) => normalizeMedia(child, { ...mediaContextFor(child, fallbackAuthor, storyContextTimes, storyFeedContexts, rootFamily), carouselIndex: index + 1 })).find(Boolean);
         if (childMedia) {
           const owner = ownerOf(candidate);
           const parentCaption = captionOf(candidate);
@@ -579,6 +691,8 @@
             timestamp: timestampOf(candidate) || storyContextTimes.get(candidate) || childMedia.timestamp,
             permalink: safeUrl(firstValue(candidate, ['permalink', 'permalink_url'])) || childMedia.permalink,
             type: 'Carousel',
+            storyFeedMention: mediaContext.storyFeedMention || childMedia.storyFeedMention,
+            storyFeedMentions: [...childMedia.storyFeedMentions, ...storyFeedReferences(candidate)],
             mentions: uniqueAccounts([...childMedia.mentions, ...parentMentions, ...parentTappable, ...parentTagged]),
             hashtags: unique([...childMedia.hashtags, ...parentHashtags]),
             tagged: unique([...childMedia.tagged, ...parentTagged])
@@ -649,6 +763,22 @@
       links.append(link);
     });
     parent.append(links);
+  }
+
+  function addStoryFeedLinks(parent, references) {
+    if (!references?.length) return;
+    const line = element('div', 'report-line');
+    line.append(element('strong', '', 'Shared post/reel in story: '));
+    references.forEach((reference, index) => {
+      if (index) line.append(document.createTextNode(' · '));
+      const label = [reference.type || 'Post/reel', reference.username ? `@${reference.username}` : '', reference.shortcode].filter(Boolean).join(' ');
+      const link = element('a', '', label);
+      link.href = reference.permalink;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      line.append(link);
+    });
+    parent.append(line);
   }
 
   function addReportSection(container, title, fields) {
@@ -739,6 +869,7 @@
       addLine('Product type', post.productType === 'Not provided' ? '' : post.productType);
       addLine('Top-level comment text', post.comments, 'comments');
       addLine('Story expires at', post.storyExpiry?.display);
+      addStoryFeedLinks(lines, post.storyFeedMentions);
       section.append(lines);
       preview.append(section);
     });
@@ -944,6 +1075,7 @@
       if (post.productType !== 'Not provided') lines.push(`Product type: ${post.productType}`);
       if (post.comments.length) lines.push(`Top-level comment text: ${post.comments.map((comment) => `${comment.author ? `@${comment.author}: ` : ''}${comment.text}`).join(' | ')}`);
       if (post.storyExpiry) lines.push(`Story expires at: ${post.storyExpiry.display}`);
+      if (post.storyFeedMentions?.length) lines.push(`Shared post/reel in story: ${post.storyFeedMentions.map((reference) => `${reference.type} ${reference.shortcode} — ${reference.permalink}`).join('; ')}`);
       lines.push('');
     });
     lines.push('MENTION INDEX');
@@ -1060,6 +1192,10 @@
         commentsDisabled: post.commentsDisabled ?? null,
         likeOrViewCountsHidden: post.likeCountsHidden ?? null,
         productType: post.productType === 'Not provided' ? null : post.productType,
+        storyFeedMentions: (post.storyFeedMentions ?? []).map((reference) => ({
+          ...reference,
+          mediaFiles: data.assets.filter((asset) => asset.storyFeedMention && asset.shortcode === reference.shortcode).map((asset) => mediaFilename(asset))
+        })),
         topLevelComments: post.comments,
         storyExpiresAt: post.storyExpiry?.display || null
       })),
