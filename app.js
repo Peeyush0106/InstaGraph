@@ -385,9 +385,9 @@
     if (!Number.isFinite(milliseconds) || milliseconds < 0) return null;
     const seconds = Math.floor(milliseconds / 1000);
     const date = new Date(milliseconds);
-    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', day: '2-digit', month: 'short', year: 'numeric' }).formatToParts(date);
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', day: '2-digit', month: 'short', year: 'numeric' }).formatToParts(date);
     const part = (type) => parts.find((entry) => entry.type === type)?.value ?? '';
-    const display = `${part('hour')}:${part('minute')}, ${part('day')} ${part('month')}, ${part('year')}`;
+    const display = `${part('hour')}:${part('minute')}:${part('second')}, ${part('day')} ${part('month')}, ${part('year')}`;
     return { seconds, milliseconds, inferred, display };
   }
 
@@ -395,11 +395,11 @@
     if (!value?.milliseconds) return '';
     const date = new Date(value.milliseconds);
     const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit',
+      timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit',
       day: '2-digit', month: 'short', year: 'numeric', hourCycle: 'h23'
     }).formatToParts(date);
     const part = (type) => parts.find((entry) => entry.type === type)?.value ?? '';
-    return `${part('hour')}:${part('minute')}, ${part('day')} ${part('month')}, ${part('year')} (UNIX: ${value.seconds})`;
+    return `${part('hour')}:${part('minute')}:${part('second')}, ${part('day')} ${part('month')}, ${part('year')} (UNIX: ${value.seconds})`;
   }
 
   function timestampOf(object) {
@@ -972,19 +972,23 @@
       addLine('Mentions', post.mentions, 'names');
       addLine('Tagged accounts / collaborators', post.tagged, 'names');
       addLine('Hashtags', post.hashtags.map((tag) => `#${tag}`));
-      addStoryFeedLinks(lines, post.storyFeedMentions);
       addLine('Accessibility text', post.accessibility);
       addLine('Location', post.location);
-      addLine('Video duration', post.duration ? `${post.duration} seconds` : '');
-      addLine('Audio / music', post.audio);
       addLine('Likes', displayNumber(post.likes));
       addLine('Comments', displayNumber(post.commentsCount));
       addLine('Views / plays', displayNumber(post.views));
+      addLine('Video duration', post.duration ? `${post.duration} seconds` : '');
+      addLine('Audio / music', post.audio);
       addLine('Paid partnership / sponsor', post.sponsorship);
       addLine('Remix source', post.remix);
       addLine('Comments disabled', typeof post.commentsDisabled === 'boolean' ? (post.commentsDisabled ? 'Yes' : 'No') : '');
       addLine('Like / view counts hidden', typeof post.likeCountsHidden === 'boolean' ? (post.likeCountsHidden ? 'Yes' : 'No') : '');
       addLine('Product type', post.productType === 'Not provided' ? '' : post.productType);
+      if (post.storyExpiry || post.instagramFields?.expiring_at) {
+        const expiry = post.storyExpiry ?? timestampFromValue(post.instagramFields.expiring_at);
+        addLine('Story expires at', reportTimestamp(expiry));
+      }
+      addStoryFeedLinks(lines, post.storyFeedMentions);
       addLine('Top-level comment text', post.comments, 'comments');
       const nullFields = [];
       for (const [field, value] of Object.entries(post.instagramFields ?? {})) {
@@ -1006,10 +1010,6 @@
       }
       if (post.instagramFields?.story_music_stickers && !musicStickerSummary(post.instagramFields.story_music_stickers)) {
         addLine('Story music', 'Music details unavailable');
-      }
-      if (post.storyExpiry || post.instagramFields?.expiring_at) {
-        const expiry = post.storyExpiry ?? timestampFromValue(post.instagramFields.expiring_at);
-        addLine('Story expires at', reportTimestamp(expiry));
       }
       if (nullFields.length) addLine('No data available', `${nullFields.join(', ')}: null`);
       section.append(lines);
