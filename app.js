@@ -894,6 +894,19 @@
 
   function profileUrl(username) { return `https://www.instagram.com/${encodeURIComponent(username)}/`; }
 
+  function resharedAuthorInfo(value) {
+    let record = value;
+    if (typeof record === 'string') {
+      try { record = JSON.parse(record); } catch { return null; }
+    }
+    if (Array.isArray(record)) record = record.find(isObject) ?? null;
+    if (!isObject(record)) return null;
+    const avatarKeys = ['profile_pic_url', 'profile_pic_url_hd', 'profile_picture_url', 'profilePictureUrl'];
+    const username = getUsername(record);
+    const avatarUrl = allObjects(record).map((node) => safeUrl(firstValue(node, avatarKeys))).find(Boolean) || '';
+    return { username, avatarUrl };
+  }
+
   function addLinkedNames(parent, names) {
     if (!names.length) { parent.append(element('span', 'no-value', 'None found')); return; }
     const links = element('div', 'mention-links');
@@ -1056,13 +1069,11 @@
           addLine('Story music', musicStickerSummary(value));
           continue;
         }
-        if (field === 'reshared_story_media_author' && isObject(value)) {
-          const username = getUsername(value);
+        if (field === 'reshared_story_media_author') {
+          const authorInfo = resharedAuthorInfo(value);
+          const username = authorInfo?.username;
           if (username) {
-            const avatarKeys = ['profile_pic_url', 'profile_pic_url_hd', 'profile_picture_url', 'profilePictureUrl'];
-            const avatarUrl = allObjects(value)
-              .map((record) => safeUrl(firstValue(record, avatarKeys)))
-              .find(Boolean) || '';
+            const avatarUrl = authorInfo.avatarUrl;
             const line = element('div', 'report-line');
             line.append(element('strong', '', `${reportFieldLabel(field)}: `));
             const chip = element('a', 'profile-chip', `@${username}`);
@@ -1080,8 +1091,8 @@
               avatar.alt = '';
               avatar.width = 34;
               avatar.height = 34;
-              avatar.loading = 'lazy';
-              avatar.referrerPolicy = 'no-referrer';
+              avatar.loading = 'eager';
+              avatar.decoding = 'async';
               avatar.addEventListener('load', () => { fallback.hidden = true; }, { once: true });
               avatar.addEventListener('error', () => { avatar.hidden = true; }, { once: true });
               avatarWrap.append(avatar);
