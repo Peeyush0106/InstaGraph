@@ -534,6 +534,13 @@
     seen: 'Seen by viewer', sharing_friction_info: 'Sharing restrictions information'
   };
 
+  const REPORT_FIELD_ORDER = [
+    'has_audio', 'story_music_stickers', 'has_liked', 'viewer_count', 'carousel_media_count',
+    'is_paid_partnership', 'sponsor_tags', 'wearable_attribution_info', 'has_translation',
+    'boosted_status', 'boost_unavailable_reason', 'can_reply', 'seen', 'sharing_friction_info',
+    'ai_label_info', 'carousel_media', 'reshared_story_media_author'
+  ];
+
   function reportFieldLabel(field) {
     return REPORT_FIELD_LABELS[field] || field.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
@@ -967,6 +974,10 @@
         addLine('Website', author.website);
       }
       addLine('Posted at', reportTimestamp(post.timestamp));
+      if (post.storyExpiry || post.instagramFields?.expiring_at) {
+        const expiry = post.storyExpiry ?? timestampFromValue(post.instagramFields.expiring_at);
+        addLine('Story expires at', reportTimestamp(expiry));
+      }
       addLine('Media type', post.type);
       addLine('Caption', post.caption);
       addLine('Mentions', post.mentions, 'names');
@@ -984,19 +995,22 @@
       addLine('Comments disabled', typeof post.commentsDisabled === 'boolean' ? (post.commentsDisabled ? 'Yes' : 'No') : '');
       addLine('Like / view counts hidden', typeof post.likeCountsHidden === 'boolean' ? (post.likeCountsHidden ? 'Yes' : 'No') : '');
       addLine('Product type', post.productType === 'Not provided' ? '' : post.productType);
-      if (post.storyExpiry || post.instagramFields?.expiring_at) {
-        const expiry = post.storyExpiry ?? timestampFromValue(post.instagramFields.expiring_at);
-        addLine('Story expires at', reportTimestamp(expiry));
-      }
       addStoryFeedLinks(lines, post.storyFeedMentions);
       addLine('Top-level comment text', post.comments, 'comments');
       const nullFields = [];
-      for (const [field, value] of Object.entries(post.instagramFields ?? {})) {
+      const orderedFields = Object.entries(post.instagramFields ?? {}).sort(([fieldA], [fieldB]) => {
+        if (fieldA === 'expiring_at') return -1;
+        if (fieldB === 'expiring_at') return 1;
+        const a = REPORT_FIELD_ORDER.indexOf(fieldA);
+        const b = REPORT_FIELD_ORDER.indexOf(fieldB);
+        return (a < 0 ? Number.MAX_SAFE_INTEGER : a) - (b < 0 ? Number.MAX_SAFE_INTEGER : b);
+      });
+      for (const [field, value] of orderedFields) {
+        if (field === 'expiring_at') continue;
         if (value === null) {
           nullFields.push(reportFieldLabel(field));
           continue;
         }
-        if (field === 'expiring_at') continue;
         if (field === 'story_music_stickers') {
           addLine('Story music', musicStickerSummary(value));
           continue;
