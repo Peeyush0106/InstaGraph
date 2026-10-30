@@ -1215,7 +1215,7 @@
       saveBlob(blob, mediaFilename(media));
       notify('Media file downloaded.');
     } catch {
-      notify('Direct download was blocked. Use Open source beside this button to save manually.');
+      notify('Direct download was blocked. Click the preview to open the media and save it manually.');
     } finally {
       if (button) { button.disabled = false; button.textContent = button.dataset.oldText || 'Save file'; }
     }
@@ -1241,7 +1241,7 @@
         } catch { blocked++; }
       }
       if (downloaded) notify(`${downloaded} media file${downloaded === 1 ? '' : 's'} saved${blocked ? `; ${blocked} could not be fetched` : ''}.`);
-      else notify('The CDN blocked browser downloads. Use Open source on each file to save manually.');
+      else notify('The CDN blocked browser downloads. Click a preview to open its media and save it manually.');
     } finally {
       button.disabled = false;
       button.textContent = originalText;
@@ -1262,7 +1262,15 @@
       const preview = document.createElement('img');
       preview.src = previewUrl; preview.alt = `Preview of ${media.type.toLowerCase()} attachment ${index + 1}`; preview.loading = 'lazy'; preview.referrerPolicy = 'no-referrer';
       preview.addEventListener('error', () => { preview.hidden = true; visual.classList.add('preview-unavailable'); }, { once: true });
-      visual.append(preview);
+      const sourceLink = document.createElement('a');
+      sourceLink.className = 'media-source-link';
+      sourceLink.href = media.variant.url;
+      sourceLink.target = '_blank';
+      sourceLink.rel = 'noopener noreferrer';
+      sourceLink.referrerPolicy = 'no-referrer';
+      sourceLink.setAttribute('aria-label', `Open ${media.type.toLowerCase()} media source in a new tab`);
+      sourceLink.append(preview);
+      visual.append(sourceLink);
       visual.append(element('span', 'media-type-pill', media.assetKind === 'vid' ? 'VIDEO' : media.assetKind === 'thb' ? 'THUMBNAIL' : 'IMAGE'));
       if (media.variant.width && media.variant.height) visual.append(element('span', 'media-quality', `${media.variant.width} × ${media.variant.height}`));
       card.append(visual);
@@ -1274,9 +1282,7 @@
       const download = element('button', 'media-download', 'Save file');
       download.type = 'button'; download.addEventListener('click', () => downloadOne(media, index, download));
       actions.append(download);
-      const open = element('a', 'media-open', 'Open source');
-      open.href = media.variant.url; open.target = '_blank'; open.rel = 'noopener noreferrer'; open.referrerPolicy = 'no-referrer';
-      actions.append(open); meta.append(actions); card.append(meta); container.append(card);
+      meta.append(actions); card.append(meta); container.append(card);
     });
   }
 
