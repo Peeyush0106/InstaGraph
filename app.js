@@ -482,6 +482,24 @@
     return safeText(value);
   }
 
+  function instagramFieldsOf(object) {
+    const keys = [
+      'has_audio', 'story_music_stickers', 'ai_label_info', 'carousel_media',
+      'reshared_story_media_author', 'has_liked', 'viewer_count', 'carousel_media_count',
+      'expiring_at', 'is_paid_partnership', 'sponsor_tags', 'wearable_attribution_info',
+      'has_translation', 'boosted_status', 'boost_unavailable_reason', 'can_reply', 'seen',
+      'sharing_friction_info'
+    ];
+    const fields = {};
+    for (const key of keys) if (Object.prototype.hasOwnProperty.call(object ?? {}, key)) fields[key] = object[key];
+    if (!Object.prototype.hasOwnProperty.call(fields, 'has_translation')) {
+      const captionObjects = [object?.caption, object?.caption_text, object?.edge_media_to_caption?.edges?.[0]?.node].filter(isObject);
+      const translated = captionObjects.find((caption) => Object.prototype.hasOwnProperty.call(caption, 'has_translation'));
+      if (translated) fields.has_translation = translated.has_translation;
+    }
+    return fields;
+  }
+
   function mediaType(object, videos) {
     const value = firstValue(object, ['media_type', 'product_type', 'type']);
     const type = String(value ?? '').toLowerCase();
@@ -549,7 +567,7 @@
       tagged,
       likes: firstValue(object, ['like_count', 'edge_media_preview_like', 'edge_liked_by'])?.count ?? firstValue(object, ['like_count', 'likes_count']),
       commentsCount: firstValue(object, ['comment_count', 'edge_media_to_parent_comment', 'edge_media_to_comment'])?.count ?? firstValue(object, ['comment_count', 'comments_count']),
-      views: firstValue(object, ['view_count', 'play_count', 'video_view_count']),
+      views: firstValue(object, ['view_count', 'viewer_count', 'play_count', 'video_view_count']),
       location: findLocation(object),
       accessibility: safeText(firstValue(object, ['accessibility_caption', 'alt_text', 'accessibility_text'])) || safeText(firstValue(object?.accessibility_info, ['accessibility_caption', 'alt_text'])),
       audio: audioInfo(object),
@@ -558,6 +576,7 @@
       commentsDisabled: firstValue(object, ['comments_disabled', 'commenting_disabled_for_viewer']),
       likeCountsHidden: firstValue(object, ['like_and_view_counts_disabled', 'likes_disabled']),
       productType: safeText(firstValue(object, ['product_type', 'media_type']) ?? inherited.productType) || 'Not provided',
+      instagramFields: { ...(inherited.instagramFields ?? {}), ...instagramFieldsOf(object) },
       comments: commentsOf(object),
       mediaIndex,
       containerKey: inherited.containerKey ?? null,
@@ -574,6 +593,7 @@
       timestamp: timestampOf(object) || storyFeed.timestamp || storyContextTimes.get(object),
       shortcode: safeText(firstValue(object, ['code', 'shortcode', 'short_code'])) || storyFeed.shortcode || '',
       productType,
+      instagramFields: instagramFieldsOf(object),
       family: storyFeed.storyFeedMention && productType.toLowerCase().includes('clips') ? 'reel' : rootFamily,
       storyFeedMention: storyFeed.storyFeedMention === true,
       videoDuration: Number(object?.video_duration) || 0
@@ -693,6 +713,7 @@
             type: 'Carousel',
             storyFeedMention: mediaContext.storyFeedMention || childMedia.storyFeedMention,
             storyFeedMentions: [...childMedia.storyFeedMentions, ...storyFeedReferences(candidate)],
+            instagramFields: { ...childMedia.instagramFields, ...mediaContext.instagramFields, ...instagramFieldsOf(candidate) },
             mentions: uniqueAccounts([...childMedia.mentions, ...parentMentions, ...parentTappable, ...parentTagged]),
             hashtags: unique([...childMedia.hashtags, ...parentHashtags]),
             tagged: unique([...childMedia.tagged, ...parentTagged])
@@ -817,7 +838,8 @@
       return;
     }
     posts.forEach((post, index) => {
-      const title = posts.length > 1 ? `ITEM ${String(index + 1).padStart(2, '0')} / ${post.type}` : post.type;
+      const category = post.family === 'story' ? 'Story' : post.family === 'reel' ? 'Reel' : 'Post';
+      const title = posts.length > 1 ? `ITEM ${String(index + 1).padStart(2, '0')} / ${category}` : category;
       const section = element('section', 'report-section');
       section.append(element('h4', '', title.toUpperCase()));
       const lines = element('div', 'report-lines');
@@ -945,6 +967,30 @@
     return `${sortableTimestamp(asset)}_${filenameHandle(asset.author?.username)}_${suffix}.${ext}`;
   }
 
+  function alternateVariantsForAsset(asset) {
+    const source = asset.assetKind === 'vid' ? asset.videoVariants : asset.imageVariants;
+    const variants = [...new Map(source.map((variant) => [variant.url, variant])).values()].sort((a, b) => {
+      const pixels = (b.width * b.height) - (a.width * a.height);
+      return pixels || (b.bitrate - a.bitrate);
+    });
+    return variants.filter((variant) => variant.url !== asset.variant.url).map((variant, index) => ({ variant, qualityIndex: index + 2 }));
+  }
+
+  function qualityFilename(asset, variant, qualityIndex) {
+    const mainName = mediaFilename(asset);
+    const extension = extensionFor(variant.url, variant.kind);
+    const basename = mainName.slice(0, Math.max(0, mainName.length - mainName.split('.').at(-1).length - 1));
+    const dimensions = variant.width && variant.height ? `${variant.width}x${variant.height}` : 'unknown-size';
+    const bitrate = variant.bitrate ? `_${variant.bitrate}bps` : '';
+    return `qualities/${basename}_quality-${String(qualityIndex).padStart(2, '0')}_${dimensions}${bitrate}.${extension}`;
+  }
+
+  function mediaIndexForAttachment(data, attachment) {
+    return data.media.findIndex((media) => media.variant.url === attachment.variant.url
+      && media.family === attachment.family
+      && media.storyFeedMention === attachment.storyFeedMention);
+  }
+
   async function fetchMedia(media) {
     const response = await fetch(media.variant.url, { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer' });
     if (!response.ok || response.type === 'opaque') throw new Error('This CDN does not allow browser download access.');
@@ -1031,7 +1077,22 @@
     });
   }
 
-  function textReport(data, mediaStatuses = null) {
+  function reportValue(value) {
+    if (typeof value === 'string') return value;
+    try { return JSON.stringify(value, null, 2) ?? String(value); } catch { return String(value); }
+  }
+
+  function addReportField(lines, label, value) {
+    const rendered = reportValue(value);
+    const parts = rendered.split('\n');
+    lines.push(`${label}: ${parts[0]}`, ...parts.slice(1).map((part) => `  ${part}`));
+  }
+
+  function assetRole(asset) {
+    return asset.assetKind === 'vid' ? 'Video' : asset.assetKind === 'thb' ? 'Thumbnail' : 'Image';
+  }
+
+  function textReport(data, mediaStatuses = null, qualityStatuses = null) {
     const lines = ['INSTAGRAPH — CATEGORIZED EXTRACTION REPORT', `Response type: ${data.jsonType}`, `Generated: ${new Date().toISOString()}`, ''];
     if (data.creator) {
       lines.push('AUTHOR / ACCOUNT');
@@ -1049,23 +1110,24 @@
       lines.push('');
     }
     data.posts.forEach((post, index) => {
-      lines.push(`${data.posts.length > 1 ? `ITEM ${String(index + 1).padStart(2, '0')} — ` : ''}${post.type.toUpperCase()}`);
+      const category = post.family === 'story' ? 'STORY' : post.family === 'reel' ? 'REEL' : 'POST';
+      lines.push(`${data.posts.length > 1 ? `ITEM ${String(index + 1).padStart(2, '0')} — ` : ''}${category}`);
+      addReportField(lines, 'Media format', post.type);
       if (post.author?.username) lines.push(`Author: @${post.author.username}${post.author.fullName ? ` — ${post.author.fullName}` : ''}`);
       if (post.author?.id) lines.push(`Author account ID: ${post.author.id}`);
       lines.push(`Media ID: ${post.id}`);
       if (post.shortcode !== 'Not provided') lines.push(`Shortcode: ${post.shortcode}`);
       if (post.permalink) lines.push(`Permalink: ${post.permalink}`);
       if (post.timestamp) lines.push(`Posted at: ${post.timestamp.display}`);
-      if (post.caption) lines.push(`Caption: ${post.caption}`);
+      if (post.caption) addReportField(lines, 'Caption', post.caption);
       lines.push(`Mentions: ${post.mentions.length ? post.mentions.map((name) => `@${name}`).join(', ') : 'None found'}`);
       if (post.tagged.length) lines.push(`Tagged accounts / collaborators: ${post.tagged.map((name) => `@${name}`).join(', ')}`);
       if (post.hashtags.length) lines.push(`Hashtags: ${post.hashtags.map((tag) => `#${tag}`).join(', ')}`);
-      lines.push(`Attachments: ${post.attachments.map((item) => `${item.type}${item.dimensions.width && item.dimensions.height ? ` (${item.dimensions.width} × ${item.dimensions.height})` : ''}`).join('; ') || 'Not found'}`);
       if (post.likes !== undefined) lines.push(`Likes: ${displayNumber(post.likes)}`);
       if (post.commentsCount !== undefined) lines.push(`Comments: ${displayNumber(post.commentsCount)}`);
       if (post.views !== undefined) lines.push(`Views / plays: ${displayNumber(post.views)}`);
       if (post.location) lines.push(`Location: ${post.location}`);
-      if (post.accessibility) lines.push(`Accessibility text: ${post.accessibility}`);
+      if (post.accessibility) addReportField(lines, 'Accessibility text', post.accessibility);
       if (post.duration) lines.push(`Video duration: ${post.duration} seconds`);
       if (post.audio) lines.push(`Audio / music: ${post.audio}`);
       if (post.sponsorship) lines.push(`Paid partnership / sponsor: ${post.sponsorship}`);
@@ -1073,20 +1135,52 @@
       if (typeof post.commentsDisabled === 'boolean') lines.push(`Comments disabled: ${post.commentsDisabled ? 'Yes' : 'No'}`);
       if (typeof post.likeCountsHidden === 'boolean') lines.push(`Like / view counts hidden: ${post.likeCountsHidden ? 'Yes' : 'No'}`);
       if (post.productType !== 'Not provided') lines.push(`Product type: ${post.productType}`);
-      if (post.comments.length) lines.push(`Top-level comment text: ${post.comments.map((comment) => `${comment.author ? `@${comment.author}: ` : ''}${comment.text}`).join(' | ')}`);
+      if (post.comments.length) addReportField(lines, 'Top-level comment text', post.comments.map((comment) => `${comment.author ? `@${comment.author}: ` : ''}${comment.text}`));
       if (post.storyExpiry) lines.push(`Story expires at: ${post.storyExpiry.display}`);
       if (post.storyFeedMentions?.length) lines.push(`Shared post/reel in story: ${post.storyFeedMentions.map((reference) => `${reference.type} ${reference.shortcode} — ${reference.permalink}`).join('; ')}`);
+
+      if (post.attachments.length) {
+        lines.push('ATTACHMENTS');
+        post.attachments.forEach((attachment, attachmentIndex) => {
+          const sourceMediaIndex = mediaIndexForAttachment(data, attachment);
+          const matchedAssets = data.assets.map((asset, assetIndex) => ({ asset, assetIndex }))
+            .filter(({ asset }) => sourceMediaIndex >= 0 && asset.sourceMediaIndex === sourceMediaIndex);
+          const dimensions = attachment.dimensions.width && attachment.dimensions.height ? ` (${attachment.dimensions.width} × ${attachment.dimensions.height})` : '';
+          lines.push(`  Attachment ${attachmentIndex + 1}: ${attachment.type}${dimensions}`);
+          if (!matchedAssets.length) {
+            lines.push(`    Source: ${attachment.variant.url}`);
+            continue;
+          }
+          for (const { asset, assetIndex } of matchedAssets) {
+            const mediaStatus = mediaStatuses?.[assetIndex];
+            const statusText = mediaStatus ? mediaStatus.included ? 'included' : 'not bundled; source blocked' : 'highest-quality file';
+            const size = asset.variant.width && asset.variant.height ? ` (${asset.variant.width} × ${asset.variant.height})` : '';
+            lines.push(`    ${assetRole(asset)}: ${mediaFilename(asset)}${size} — ${statusText}`);
+            lines.push(`      Source: ${asset.variant.url}`);
+            const lowerQualities = alternateVariantsForAsset(asset).map(({ variant, qualityIndex }) => ({
+              fileName: qualityFilename(asset, variant, qualityIndex), variant, qualityIndex
+            }));
+            for (const quality of lowerQualities) {
+              const qualityStatus = qualityStatuses?.find((status) => status.assetIndex === assetIndex && status.qualityIndex === quality.qualityIndex);
+              const qualityResult = qualityStatus ? qualityStatus.included ? 'included' : 'not bundled; source blocked' : 'available in package';
+              const qualitySize = quality.variant.width && quality.variant.height ? ` (${quality.variant.width} × ${quality.variant.height})` : '';
+              lines.push(`      Lower quality: ${quality.fileName}${qualitySize} — ${qualityResult}`);
+            }
+          }
+        });
+      }
+
+      const extraFields = post.instagramFields ?? {};
+      if (Object.keys(extraFields).length) {
+        lines.push('ADDITIONAL GRAPHQL FIELDS');
+        for (const [field, value] of Object.entries(extraFields)) addReportField(lines, field, value);
+      }
       lines.push('');
     });
     lines.push('MENTION INDEX');
     lines.push([...data.mentionCounts.entries()].map(([name, count]) => `@${name}${count > 1 ? ` (${count} items)` : ''}`).join(', ') || 'None found');
     lines.push('', 'HASHTAG INDEX');
     lines.push([...data.hashtagCounts.keys()].map((tag) => `#${tag}`).join(', ') || 'None found');
-    lines.push('', 'MEDIA FILES');
-    data.assets.forEach((media, index) => {
-      const status = mediaStatuses?.[index]?.included === false ? 'not bundled (source blocked browser access)' : 'selected source';
-      lines.push(`${index + 1}. ${mediaFilename(media)} — ${media.variant.width && media.variant.height ? `${media.variant.width} × ${media.variant.height}` : 'largest available variant'} — ${status} — ${media.variant.url}`);
-    });
     lines.push('', 'ABOUT THIS REPORT', 'Only fields included in the supplied GraphQL response can be extracted. This report was generated locally in your browser.');
     return lines.join('\n');
   }
@@ -1098,7 +1192,7 @@
     notify('Categorized report downloaded.');
   }
 
-  function metadataDocument(data, mediaStatuses) {
+  function metadataDocument(data, mediaStatuses, qualityStatuses = []) {
     const mediaEntries = data.assets.map((media, index) => {
       const included = mediaStatuses[index]?.included === true;
       return {
@@ -1118,10 +1212,18 @@
         carouselSlide: media.mediaIndex || null,
         durationSeconds: media.duration || null,
         alternateImageVariants: media.imageVariants.map(({ url, width, height }) => ({ url, width, height })),
-        alternateVideoVariants: media.videoVariants.map(({ url, width, height, bitrate }) => ({ url, width, height, bitrate }))
+        alternateVideoVariants: media.videoVariants.map(({ url, width, height, bitrate }) => ({ url, width, height, bitrate })),
+        alternateQualities: qualityStatuses.filter((quality) => quality.assetIndex === index).map((quality) => ({
+          file: quality.fileName,
+          sourceUrl: quality.sourceUrl,
+          width: quality.variant.width || null,
+          height: quality.variant.height || null,
+          bitrate: quality.variant.bitrate || null,
+          includedInPackage: quality.included
+        })),
+        instagramFields: media.instagramFields || {}
       };
     });
-    const mediaIndexByUrl = new Map(data.media.map((media, index) => [media.variant.url, index]));
     return {
       packageFormat: 'InstaGraph post/story/reel archive',
       schemaVersion: 1,
@@ -1145,6 +1247,8 @@
       summary: {
         postOrStoryCount: data.posts.length,
         mediaFileCount: data.assets.length,
+        alternateQualityFileCount: qualityStatuses.length,
+        alternateQualityFilesBundled: qualityStatuses.filter((quality) => quality.included).length,
         uniqueMentionCount: data.mentionCounts.size,
         uniqueHashtagCount: data.hashtagCounts.size,
         bundledMediaCount: mediaEntries.filter((media) => media.includedInPackage).length,
@@ -1153,6 +1257,7 @@
       mentions: [...data.mentionCounts.entries()].map(([username, itemCount]) => ({ username, profileUrl: profileUrl(username), itemCount })),
       hashtags: [...data.hashtagCounts.entries()].map(([tag, itemCount]) => ({ tag, itemCount })),
       items: data.posts.map((post) => ({
+        category: post.family,
         itemType: post.type,
         mediaId: post.id,
         shortcode: post.shortcode,
@@ -1164,8 +1269,8 @@
         taggedAccountsAndCollaborators: post.tagged,
         hashtags: post.hashtags,
         attachments: post.attachments.map((attachment) => {
-          const sourceMediaIndex = mediaIndexByUrl.get(attachment.variant.url);
-          if (sourceMediaIndex === undefined) return { sourceUrl: attachment.variant.url, includedInPackage: false };
+          const sourceMediaIndex = mediaIndexForAttachment(data, attachment);
+          if (sourceMediaIndex < 0) return { sourceUrl: attachment.variant.url, includedInPackage: false };
           const files = data.assets.flatMap((asset, assetIndex) => asset.sourceMediaIndex === sourceMediaIndex ? [{
             file: mediaEntries[assetIndex].file,
             fileName: mediaEntries[assetIndex].fileName,
@@ -1177,6 +1282,10 @@
             file: files[0]?.file ?? null,
             fileName: files[0]?.fileName ?? null,
             includedInPackage: files.length > 0 && files.every((file) => file.includedInPackage),
+            alternateQualities: qualityStatuses.filter((quality) => data.assets[quality.assetIndex]?.sourceMediaIndex === sourceMediaIndex).map((quality) => ({
+              file: quality.fileName,
+              includedInPackage: quality.included
+            })),
             mediaType: attachment.type,
             width: attachment.dimensions.width || null,
             height: attachment.dimensions.height || null
@@ -1192,6 +1301,7 @@
         commentsDisabled: post.commentsDisabled ?? null,
         likeOrViewCountsHidden: post.likeCountsHidden ?? null,
         productType: post.productType === 'Not provided' ? null : post.productType,
+        instagramFields: post.instagramFields || {},
         storyFeedMentions: (post.storyFeedMentions ?? []).map((reference) => ({
           ...reference,
           mediaFiles: data.assets.filter((asset) => asset.storyFeedMention && asset.shortcode === reference.shortcode).map((asset) => mediaFilename(asset))
@@ -1278,6 +1388,14 @@
     const label = button.querySelector('span');
     const oldText = label.textContent;
     const mediaStatuses = [];
+    const qualityAssets = extracted.assets.flatMap((asset, assetIndex) => alternateVariantsForAsset(asset).map(({ variant, qualityIndex }) => ({
+      assetIndex,
+      variant,
+      qualityIndex,
+      fileName: qualityFilename(asset, variant, qualityIndex),
+      sourceUrl: variant.url
+    })));
+    const qualityStatuses = [];
     const files = [];
     for (const [index, media] of extracted.assets.entries()) {
       label.textContent = `Fetching media ${index + 1}/${extracted.assets.length}…`;
@@ -1289,42 +1407,43 @@
         mediaStatuses.push({ included: false, fileName: mediaFilename(media), reason: error.message || 'CDN blocked browser access' });
       }
     }
+    for (const [index, quality] of qualityAssets.entries()) {
+      label.textContent = `Fetching lower quality ${index + 1}/${qualityAssets.length}…`;
+      try {
+        const asset = extracted.assets[quality.assetIndex];
+        const blob = await fetchMedia({ ...asset, variant: quality.variant });
+        files.push({ name: quality.fileName, blob });
+        qualityStatuses.push({ ...quality, included: true });
+      } catch (error) {
+        qualityStatuses.push({ ...quality, included: false, reason: error.message || 'CDN blocked browser access' });
+      }
+    }
     try {
-      const metadata = metadataDocument(extracted, mediaStatuses);
-      const report = textReport(extracted, mediaStatuses);
-      const sourceLinks = extracted.assets.map((media, index) => {
+      const metadata = metadataDocument(extracted, mediaStatuses, qualityStatuses);
+      const report = textReport(extracted, mediaStatuses, qualityStatuses);
+      const mediaLinks = extracted.assets.map((media, index) => {
         const status = mediaStatuses[index]?.included ? 'INCLUDED' : 'NOT BUNDLED — source blocked browser access';
         return `${String(index + 1).padStart(2, '0')}. ${status}\nFile: ${mediaFilename(media)}\nSource: ${media.variant.url}`;
-      }).join('\n\n') || 'No media files were found in this response.';
-      const readme = [
-        'INSTAGRAPH COMPLETE POST / STORY / REEL PACKAGE', '',
-        `Response type: ${extracted.jsonType}`,
-        `Account: ${extracted.creator?.username ? `@${extracted.creator.username}` : extracted.creator?.id ? `ID ${extracted.creator.id}` : 'Not identified'}`,
-        `Media included: ${mediaStatuses.filter((status) => status.included).length} of ${extracted.assets.length}`,
-        '', 'CONTENTS',
-        '- media files in the package root: highest-quality image/video files and available video thumbnails',
-        '- metadata/graphql-response.json: the original supplied JSON response',
-        '- metadata/categorized-report.txt: human-readable categorized details',
-        '- metadata/metadata.json: structured extracted information and media manifest',
-        '- metadata/media-source-links.txt: source URLs and inclusion status for each media file',
-        '- metadata/README.txt: this file', '',
-        'Some Instagram CDNs block browser access. Any media that could not be fetched is listed with its source URL in metadata/media-source-links.txt and metadata/metadata.json.',
-        'The original JSON response is included so all fields supplied to InstaGraph remain available.'
-      ].join('\n');
+      });
+      const qualityLinks = qualityAssets.map((quality, index) => {
+        const status = qualityStatuses[index]?.included ? 'INCLUDED' : 'NOT BUNDLED — source blocked browser access';
+        return `${String(index + 1).padStart(2, '0')}. ${status}\nFile: ${quality.fileName}\nSource: ${quality.sourceUrl}`;
+      });
+      const sourceLinks = [...mediaLinks, ...qualityLinks].join('\n\n') || 'No media files were found in this response.';
       const rawJson = extracted.rawJsonText || '{}';
       files.push(
         { name: 'metadata/categorized-report.txt', blob: new Blob([report], { type: 'text/plain;charset=utf-8' }) },
         { name: 'metadata/metadata.json', blob: new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json;charset=utf-8' }) },
         { name: 'metadata/graphql-response.json', blob: new Blob([rawJson], { type: 'application/json;charset=utf-8' }) },
-        { name: 'metadata/media-source-links.txt', blob: new Blob([sourceLinks], { type: 'text/plain;charset=utf-8' }) },
-        { name: 'metadata/README.txt', blob: new Blob([readme], { type: 'text/plain;charset=utf-8' }) }
+        { name: 'metadata/media-source-links.txt', blob: new Blob([sourceLinks], { type: 'text/plain;charset=utf-8' }) }
       );
       label.textContent = 'Building package…';
       const zip = await zipBlob(files);
       saveBlob(zip, packageFilename(extracted));
       const bundled = mediaStatuses.filter((status) => status.included).length;
-      const blocked = mediaStatuses.length - bundled;
-      notify(`Complete package downloaded${blocked ? `; ${blocked} media source${blocked === 1 ? '' : 's'} could not be fetched and are listed in the archive` : ''}.`);
+      const bundledQualities = qualityStatuses.filter((status) => status.included).length;
+      const blocked = mediaStatuses.length + qualityStatuses.length - bundled - bundledQualities;
+      notify(`Complete package downloaded with ${bundledQualities} alternate quality file${bundledQualities === 1 ? '' : 's'}${blocked ? `; ${blocked} media source${blocked === 1 ? '' : 's'} could not be fetched` : ''}.`);
     } catch (error) {
       showError(`The package could not be created. ${error.message || 'The response may be too large for this browser.'}`);
     } finally {
