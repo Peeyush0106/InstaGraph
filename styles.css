@@ -160,6 +160,9 @@ h1{font-size:clamp(58px,7vw,88px);line-height:1.02;letter-spacing:-5px;margin-bo
 .media-source-link{position:absolute;inset:0;display:block;cursor:zoom-in}
 .media-source-link img{display:block}
 .media-type-pill,.media-quality{z-index:1;pointer-events:none}
+.profile-chip{display:inline-flex;align-items:center;gap:8px;vertical-align:middle;padding:4px 11px 4px 5px;border:1px solid #e1e9e1;border-radius:999px;background:#f4f8f4;color:#356247;font-weight:600;text-decoration:none;transition:background .16s ease,transform .16s ease}
+.profile-chip:hover{background:#eaf2ea;transform:translateY(-1px)}
+.profile-chip img{width:26px;height:26px;flex:none;object-fit:cover;border-radius:50%;background:#e1e9e1}
 .item-pair .media-card{box-shadow:0 4px 15px #253e2d08}
 .item-pair .report-section{position:sticky;top:16px;align-self:start;max-height:calc(100vh - 40px);overflow:auto;margin:0;padding:4px 5px 8px 0;border:0}
 .item-pair .report-section h4{font:700 17px/1.35 var(--display);letter-spacing:-.35px;color:var(--ink);margin:0 0 17px}

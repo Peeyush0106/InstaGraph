@@ -1056,6 +1056,37 @@
           addLine('Story music', musicStickerSummary(value));
           continue;
         }
+        if (field === 'reshared_story_media_author' && isObject(value)) {
+          const username = getUsername(value);
+          if (username) {
+            const profile = value.user ?? value.owner ?? value.author ?? value;
+            const avatarUrl = safeUrl(firstValue(value, ['profile_pic_url', 'profile_pic_url_hd', 'profile_picture_url', 'profilePictureUrl'])
+              ?? firstValue(profile, ['profile_pic_url', 'profile_pic_url_hd', 'profile_picture_url', 'profilePictureUrl']));
+            const line = element('div', 'report-line');
+            line.append(element('strong', '', `${reportFieldLabel(field)}: `));
+            const chip = element('a', 'profile-chip', `@${username}`);
+            chip.href = profileUrl(username);
+            chip.target = '_blank';
+            chip.rel = 'noopener noreferrer';
+            chip.setAttribute('aria-label', `Open Instagram profile for @${username} in a new tab`);
+            if (avatarUrl) {
+              const avatar = document.createElement('img');
+              avatar.src = avatarUrl;
+              avatar.alt = '';
+              avatar.width = 26;
+              avatar.height = 26;
+              avatar.loading = 'lazy';
+              avatar.referrerPolicy = 'no-referrer';
+              avatar.addEventListener('error', () => avatar.remove(), { once: true });
+              chip.prepend(avatar);
+            }
+            line.append(chip);
+            lines.append(line);
+          } else {
+            addLine(reportFieldLabel(field), 'Instagram user');
+          }
+          continue;
+        }
         if (field === 'sharing_friction_info' && isObject(value)) {
           const meaningful = Object.fromEntries(Object.entries(value).filter(([key, nested]) => key !== 'bloks_app_url' && !/mute/i.test(key) && nested !== null));
           if (Object.keys(meaningful).length) addLine(reportFieldLabel(field), Object.entries(meaningful).map(([key, nested]) => `${reportFieldLabel(key)}: ${reportValue(nested)}`).join('; '));
