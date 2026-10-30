@@ -955,9 +955,15 @@
       addLine('Top-level comment text', post.comments, 'comments');
       addLine('Story expires at', post.storyExpiry?.display);
       addStoryFeedLinks(lines, post.storyFeedMentions);
+      const nullFields = [];
       for (const [field, value] of Object.entries(post.instagramFields ?? {})) {
+        if (value === null) {
+          nullFields.push(reportFieldLabel(field));
+          continue;
+        }
         addLine(reportFieldLabel(field), reportValue(reportFieldValue(field, value)));
       }
+      if (nullFields.length) addLine('No data available', `${nullFields.join(', ')}: null`);
       const attachmentAssets = data.assets.filter((asset) => post.attachments.some((attachment) =>
         mediaIndexForAttachment(data, attachment) === asset.sourceMediaIndex));
       addLine('Attachments', attachmentAssets.flatMap((asset, assetIndex) => {
