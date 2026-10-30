@@ -950,8 +950,11 @@
   }
 
   function renderReport(data, mediaStatuses = null, qualityStatuses = null) {
-    const preview = $('#report-preview');
+    const preview = $('#item-list');
     preview.replaceChildren();
+    renderMedia(data);
+    const mediaPool = $('#media-list');
+    const pairedAssetIndexes = new Set();
     const posts = data.posts;
     const mentionList = [...data.mentionCounts.keys()];
     const hashtagList = [...data.hashtagCounts.keys()].map((tag) => `#${tag}`);
@@ -962,6 +965,28 @@
     posts.forEach((post, index) => {
       const category = post.family === 'story' ? 'Story' : post.family === 'reel' ? 'Reel' : 'Post';
       const title = posts.length > 1 ? `ITEM ${String(index + 1).padStart(2, '0')} / ${category}` : category;
+      const pair = element('article', 'item-pair');
+      const itemMedia = element('div', 'item-media-list');
+      const matchingAssetIndexes = new Set();
+      for (const attachment of post.attachments) {
+        const mediaIndex = mediaIndexForAttachment(data, attachment);
+        if (mediaIndex >= 0) data.assets.forEach((asset, assetIndex) => {
+          if (asset.sourceMediaIndex === mediaIndex) matchingAssetIndexes.add(assetIndex);
+        });
+      }
+      if (post.family === 'story' && post.storyFeedMentions?.length) {
+        data.assets.forEach((asset, assetIndex) => {
+          if (asset.storyFeedMention && post.storyFeedMentions.some((reference) => reference.shortcode === asset.shortcode)) matchingAssetIndexes.add(assetIndex);
+        });
+      }
+      for (const assetIndex of matchingAssetIndexes) {
+        const card = mediaPool.querySelector(`[data-asset-index="${assetIndex}"]`);
+        if (card) {
+          itemMedia.append(card);
+          pairedAssetIndexes.add(assetIndex);
+        }
+      }
+      if (!itemMedia.childElementCount) itemMedia.append(element('p', 'no-value item-media-empty', 'No media preview found for this item.'));
       const section = element('section', 'report-section');
       section.append(element('h4', '', title.toUpperCase()));
       const lines = element('div', 'report-lines');
@@ -1043,15 +1068,28 @@
       }
       if (nullFields.length) addLine('No data available', `${nullFields.join(', ')}: null`);
       section.append(lines);
-      preview.append(section);
+      pair.append(itemMedia, section);
+      preview.append(pair);
     });
+    const unpairedAssets = data.assets.map((asset, index) => ({ asset, index })).filter(({ index }) => !pairedAssetIndexes.has(index));
+    if (unpairedAssets.length) {
+      const pair = element('article', 'item-pair additional-media-pair');
+      pair.append(element('div', 'item-pair-title', 'ADDITIONAL MEDIA'));
+      const itemMedia = element('div', 'item-media-list');
+      for (const { index } of unpairedAssets) {
+        const card = mediaPool.querySelector(`[data-asset-index="${index}"]`);
+        if (card) itemMedia.append(card);
+      }
+      pair.append(itemMedia);
+      preview.append(pair);
+    }
     addReportSection(preview, 'Mention index', [['Accounts', mentionList, 'names']]);
     addReportSection(preview, 'Hashtag index', [['Tags', hashtagList]]);
     if (!posts.length && (mentionList.length || hashtagList.length)) return;
   }
 
   function categorizedReportFromPreview(data) {
-    const sections = [...document.querySelectorAll('#report-preview .report-section')].map((section) => {
+    const sections = [...document.querySelectorAll('#item-list .report-section')].map((section) => {
       const heading = section.querySelector('h4')?.innerText || 'DETAILS';
       const sectionLines = [...section.querySelectorAll('.report-line')].map((line) => `  ${line.innerText.trim()}`);
       return `${heading}\n${sectionLines.join('\n')}`;
@@ -1214,11 +1252,11 @@
     const container = $('#media-list');
     container.replaceChildren();
     const mediaList = data.assets;
-    $('#media-count').textContent = `${mediaList.length} ${mediaList.length === 1 ? 'file' : 'files'}`;
-    $('#media-empty').hidden = mediaList.length > 0;
     $('#sequence-button').disabled = mediaList.length === 0;
     mediaList.forEach((media, index) => {
       const card = element('article', 'media-card');
+      card.dataset.assetIndex = String(index);
+      card.dataset.sourceMediaIndex = String(media.sourceMediaIndex);
       const visual = element('div', 'media-visual');
       const previewUrl = media.imageVariants.length ? bestVariant(media.imageVariants).url : media.variant.url;
       const preview = document.createElement('img');
@@ -1535,7 +1573,6 @@
     if (!isObject(json)) { showError('The JSON root must be an object or array.'); return; }
     extracted = extract(json);
     extracted.rawJsonText = input.value;
-    renderMedia(extracted);
     renderReport(extracted);
     $('#stat-posts').textContent = String(extracted.posts.length);
     $('#stat-assets').textContent = String(extracted.assets.length);

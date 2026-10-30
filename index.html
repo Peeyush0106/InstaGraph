@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f6f2">
   <meta name="description" content="Extract Instagram media and organized details from a GraphQL JSON response, right in your browser.">
   <title>InstaGraph — response extractor</title>
-  <link rel="stylesheet" href="styles.css?v=20261031-3">
+  <link rel="stylesheet" href="styles.css?v=20261031-4">
 </head>
 <body>
   <div class="app-shell">
@@ -62,20 +62,8 @@
           <div class="stat-card"><span class="stat-kicker">HASHTAGS</span><div><strong id="stat-hashtags">0</strong><span>unique tags</span></div><span class="stat-index">D</span></div>
         </div>
 
-        <div class="results-grid">
-          <section class="media-panel panel" aria-labelledby="media-title">
-            <div class="panel-heading"><div><div class="panel-overline">ORIGINAL MEDIA</div><h3 id="media-title">Attachments</h3></div><div class="media-heading-actions"><span id="media-count" class="count-pill">0 files</span></div></div>
-            <p class="panel-description">Highest-resolution media files and available video thumbnails. The package also includes alternate qualities.</p>
-            <div id="media-list" class="media-list"></div>
-            <div id="media-empty" class="empty-media" hidden><span class="empty-glyph">◌</span><strong>No direct media URL found</strong><span>Some responses contain post details without the media source. Any available fields are still included in the report.</span></div>
-            <p class="download-note">Download media saves files one at a time; your browser may ask to allow multiple downloads. The complete package keeps selected media in the ZIP root, alternate qualities in qualities/, and report and JSON files in metadata/. Instagram CDNs can restrict browser downloads.</p>
-          </section>
-
-          <section class="report-panel panel" aria-labelledby="report-title">
-            <div class="panel-heading"><div><div class="panel-overline">STRUCTURED DETAILS</div><h3 id="report-title">Categorized information</h3></div><span class="report-live"><i></i> PREVIEW</span></div>
-            <div id="report-preview" class="report-preview"></div>
-          </section>
-        </div>
+        <div id="item-list" class="item-list" aria-label="Items with media and categorized details"></div>
+        <div id="media-pool" hidden><div id="media-list"></div></div>
       </section>
 
       <section class="capabilities" aria-labelledby="capabilities-title">
@@ -93,6 +81,6 @@
   </div>
   <button id="mode-toggle" class="mode-toggle" type="button" aria-pressed="false" aria-label="Switch to Pro Mode" title="Switch to Pro Mode">Pro Mode</button>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20261030-3"></script>
+  <script src="app.js?v=20261031-4"></script>
 </body>
 </html>
