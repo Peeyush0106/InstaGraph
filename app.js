@@ -247,10 +247,10 @@
         }
       }
     }
-    const seen = new Set();
+    const seenShortcodes = new Set();
     return references.filter((reference) => {
-      if (seen.has(reference.shortcode)) return false;
-      seen.add(reference.shortcode);
+      if (seenShortcodes.has(reference.shortcode)) return false;
+      seenShortcodes.add(reference.shortcode);
       return true;
     });
   }
