@@ -500,6 +500,43 @@
     return fields;
   }
 
+  const REPORT_FIELD_LABELS = {
+    has_audio: 'Has audio', story_music_stickers: 'Story music sticker details',
+    ai_label_info: 'AI label details', carousel_media: 'Carousel media details',
+    reshared_story_media_author: 'Author of reshared story media', has_liked: 'Liked by viewer',
+    viewer_count: 'Viewer count', carousel_media_count: 'Carousel item count',
+    expiring_at: 'Expires at', is_paid_partnership: 'Paid partnership',
+    sponsor_tags: 'Sponsor tags', wearable_attribution_info: 'Wearable attribution details',
+    has_translation: 'Translation available', boosted_status: 'Boost status',
+    boost_unavailable_reason: 'Why boosting is unavailable', can_reply: 'Can viewers reply',
+    seen: 'Seen by viewer', sharing_friction_info: 'Sharing restrictions information'
+  };
+
+  function reportFieldLabel(field) {
+    return REPORT_FIELD_LABELS[field] || field.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function reportFieldValue(field, value) {
+    if (['has_audio', 'has_liked', 'has_translation', 'is_paid_partnership', 'can_reply', 'seen'].includes(field) && typeof value === 'boolean') {
+      return value ? 'Yes' : 'No';
+    }
+    if (field === 'expiring_at' && (typeof value === 'number' || /^\d{10,13}$/.test(String(value)))) {
+      const numeric = Number(value);
+      const date = new Date(numeric < 1e12 ? numeric * 1000 : numeric);
+      if (!Number.isNaN(date.getTime())) return new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'Asia/Kolkata' }).format(date);
+    }
+    return value;
+  }
+
+  function reportValue(value) {
+    if (typeof value === 'string') return value;
+    try { return JSON.stringify(value, null, 2) ?? String(value); } catch { return String(value); }
+  }
+
+  function reportFieldDisplay(field, value) {
+    return `${reportFieldLabel(field)}: ${reportValue(reportFieldValue(field, value))}`;
+  }
+
   function mediaType(object, videos) {
     const value = firstValue(object, ['media_type', 'product_type', 'type']);
     const type = String(value ?? '').toLowerCase();
@@ -730,6 +767,8 @@
     carouselParents.forEach((parent) => sidecarNodes(parent).forEach((child) => carouselChildItems.add(child)));
     posts.length = 0;
     for (const { candidate, media } of detailCandidates) {
+      // Story feed media is an attachment/reference inside the story, not an item authored by the story owner.
+      if (media.storyFeedMention) continue;
       if (carouselChildItems.has(candidate) || sidecarChildIds.has(media.id) || sidecarChildUrls.has(media.variant.url)) continue;
       const isContainer = sidecarNodes(candidate).length > 0;
       const itemKey = safeText(firstValue(candidate, ['id', 'pk', 'media_id', 'code', 'shortcode'])) || media.variant.url;
@@ -827,7 +866,7 @@
     container.append(section);
   }
 
-  function renderReport(data) {
+  function renderReport(data, mediaStatuses = null, qualityStatuses = null) {
     const preview = $('#report-preview');
     preview.replaceChildren();
     const posts = data.posts;
@@ -863,13 +902,10 @@
         addLine('Followers', displayNumber(author.followers));
         addLine('Following', displayNumber(author.following));
         addLine('Posts', displayNumber(author.posts));
-        addLine('Profile picture URL', author.profilePicture, 'url');
+        addLine('Profile picture', author.profilePicture);
         addLine('Bio', author.biography);
-        addLine('Website', author.website, 'url');
+        addLine('Website', author.website);
       }
-      addLine('Media ID', post.id);
-      addLine('Shortcode', post.shortcode === 'Not provided' ? '' : post.shortcode);
-      addLine('Permalink', post.permalink, 'url');
       addLine('Posted at', post.timestamp?.display);
       addLine('Caption', post.caption);
       addLine('Mentions', post.mentions, 'names');
@@ -892,12 +928,41 @@
       addLine('Top-level comment text', post.comments, 'comments');
       addLine('Story expires at', post.storyExpiry?.display);
       addStoryFeedLinks(lines, post.storyFeedMentions);
+      for (const [field, value] of Object.entries(post.instagramFields ?? {})) {
+        addLine(reportFieldLabel(field), reportValue(reportFieldValue(field, value)));
+      }
+      const attachmentAssets = data.assets.filter((asset) => post.attachments.some((attachment) =>
+        mediaIndexForAttachment(data, attachment) === asset.sourceMediaIndex));
+      addLine('Attachments', attachmentAssets.flatMap((asset, assetIndex) => {
+        const result = mediaStatuses?.[assetIndex]?.included === false ? ' (download unavailable)' : '';
+        const entries = [`${assetRole(asset)}: ${mediaFilename(asset)}${result}`];
+        for (const { variant, qualityIndex } of alternateVariantsForAsset(asset)) {
+          const status = qualityStatuses?.find((item) => item.assetIndex === assetIndex && item.qualityIndex === qualityIndex);
+          entries.push(`Lower quality: ${qualityFilename(asset, variant, qualityIndex)}${status?.included === false ? ' (download unavailable)' : ''}`);
+        }
+        return entries;
+      }));
       section.append(lines);
       preview.append(section);
     });
     addReportSection(preview, 'Mention index', [['Accounts', mentionList, 'names']]);
     addReportSection(preview, 'Hashtag index', [['Tags', hashtagList]]);
     if (!posts.length && (mentionList.length || hashtagList.length)) return;
+  }
+
+  function categorizedReportFromPreview(data) {
+    const sections = [...document.querySelectorAll('#report-preview .report-section')].map((section) => {
+      const heading = section.querySelector('h4')?.innerText || 'DETAILS';
+      const sectionLines = [...section.querySelectorAll('.report-line')].map((line) => `  ${line.innerText.trim()}`);
+      return `${heading}\n${sectionLines.join('\n')}`;
+    });
+    return [
+      'INSTAGRAPH — CATEGORIZED EXTRACTION REPORT',
+      `Response type: ${data.jsonType}`,
+      `Generated: ${new Date().toISOString()}`,
+      '', ...sections, '', 'ABOUT THIS REPORT',
+      'Only details included in the supplied GraphQL response can be extracted. This report was generated locally in your browser.'
+    ].join('\n');
   }
 
   function safeFilePart(value) {
@@ -1077,117 +1142,14 @@
     });
   }
 
-  function reportValue(value) {
-    if (typeof value === 'string') return value;
-    try { return JSON.stringify(value, null, 2) ?? String(value); } catch { return String(value); }
-  }
-
-  function addReportField(lines, label, value) {
-    const rendered = reportValue(value);
-    const parts = rendered.split('\n');
-    lines.push(`${label}: ${parts[0]}`, ...parts.slice(1).map((part) => `  ${part}`));
-  }
-
   function assetRole(asset) {
     return asset.assetKind === 'vid' ? 'Video' : asset.assetKind === 'thb' ? 'Thumbnail' : 'Image';
   }
 
-  function textReport(data, mediaStatuses = null, qualityStatuses = null) {
-    const lines = ['INSTAGRAPH — CATEGORIZED EXTRACTION REPORT', `Response type: ${data.jsonType}`, `Generated: ${new Date().toISOString()}`, ''];
-    if (data.creator) {
-      lines.push('AUTHOR / ACCOUNT');
-      if (data.creator.username) lines.push(`Username: @${data.creator.username}`);
-      if (data.creator.fullName) lines.push(`Display name: ${data.creator.fullName}`);
-      if (data.creator.id) lines.push(`Account ID: ${data.creator.id}`);
-      if (typeof data.creator.verified === 'boolean') lines.push(`Verified: ${data.creator.verified ? 'Yes' : 'No'}`);
-      if (typeof data.creator.private === 'boolean') lines.push(`Private account: ${data.creator.private ? 'Yes' : 'No'}`);
-      if (data.creator.followers !== undefined) lines.push(`Followers: ${displayNumber(data.creator.followers)}`);
-      if (data.creator.following !== undefined) lines.push(`Following: ${displayNumber(data.creator.following)}`);
-      if (data.creator.posts !== undefined) lines.push(`Posts: ${displayNumber(data.creator.posts)}`);
-      if (data.creator.profilePicture) lines.push(`Profile picture URL: ${data.creator.profilePicture}`);
-      if (data.creator.biography) lines.push(`Bio: ${data.creator.biography}`);
-      if (data.creator.website) lines.push(`Website: ${data.creator.website}`);
-      lines.push('');
-    }
-    data.posts.forEach((post, index) => {
-      const category = post.family === 'story' ? 'STORY' : post.family === 'reel' ? 'REEL' : 'POST';
-      lines.push(`${data.posts.length > 1 ? `ITEM ${String(index + 1).padStart(2, '0')} — ` : ''}${category}`);
-      addReportField(lines, 'Media format', post.type);
-      if (post.author?.username) lines.push(`Author: @${post.author.username}${post.author.fullName ? ` — ${post.author.fullName}` : ''}`);
-      if (post.author?.id) lines.push(`Author account ID: ${post.author.id}`);
-      lines.push(`Media ID: ${post.id}`);
-      if (post.shortcode !== 'Not provided') lines.push(`Shortcode: ${post.shortcode}`);
-      if (post.permalink) lines.push(`Permalink: ${post.permalink}`);
-      if (post.timestamp) lines.push(`Posted at: ${post.timestamp.display}`);
-      if (post.caption) addReportField(lines, 'Caption', post.caption);
-      lines.push(`Mentions: ${post.mentions.length ? post.mentions.map((name) => `@${name}`).join(', ') : 'None found'}`);
-      if (post.tagged.length) lines.push(`Tagged accounts / collaborators: ${post.tagged.map((name) => `@${name}`).join(', ')}`);
-      if (post.hashtags.length) lines.push(`Hashtags: ${post.hashtags.map((tag) => `#${tag}`).join(', ')}`);
-      if (post.likes !== undefined) lines.push(`Likes: ${displayNumber(post.likes)}`);
-      if (post.commentsCount !== undefined) lines.push(`Comments: ${displayNumber(post.commentsCount)}`);
-      if (post.views !== undefined) lines.push(`Views / plays: ${displayNumber(post.views)}`);
-      if (post.location) lines.push(`Location: ${post.location}`);
-      if (post.accessibility) addReportField(lines, 'Accessibility text', post.accessibility);
-      if (post.duration) lines.push(`Video duration: ${post.duration} seconds`);
-      if (post.audio) lines.push(`Audio / music: ${post.audio}`);
-      if (post.sponsorship) lines.push(`Paid partnership / sponsor: ${post.sponsorship}`);
-      if (post.remix) lines.push(`Remix source: ${post.remix}`);
-      if (typeof post.commentsDisabled === 'boolean') lines.push(`Comments disabled: ${post.commentsDisabled ? 'Yes' : 'No'}`);
-      if (typeof post.likeCountsHidden === 'boolean') lines.push(`Like / view counts hidden: ${post.likeCountsHidden ? 'Yes' : 'No'}`);
-      if (post.productType !== 'Not provided') lines.push(`Product type: ${post.productType}`);
-      if (post.comments.length) addReportField(lines, 'Top-level comment text', post.comments.map((comment) => `${comment.author ? `@${comment.author}: ` : ''}${comment.text}`));
-      if (post.storyExpiry) lines.push(`Story expires at: ${post.storyExpiry.display}`);
-      if (post.storyFeedMentions?.length) lines.push(`Shared post/reel in story: ${post.storyFeedMentions.map((reference) => `${reference.type} ${reference.shortcode} — ${reference.permalink}`).join('; ')}`);
-
-      if (post.attachments.length) {
-        lines.push('ATTACHMENTS');
-        post.attachments.forEach((attachment, attachmentIndex) => {
-          const sourceMediaIndex = mediaIndexForAttachment(data, attachment);
-          const matchedAssets = data.assets.map((asset, assetIndex) => ({ asset, assetIndex }))
-            .filter(({ asset }) => sourceMediaIndex >= 0 && asset.sourceMediaIndex === sourceMediaIndex);
-          const dimensions = attachment.dimensions.width && attachment.dimensions.height ? ` (${attachment.dimensions.width} × ${attachment.dimensions.height})` : '';
-          lines.push(`  Attachment ${attachmentIndex + 1}: ${attachment.type}${dimensions}`);
-          if (!matchedAssets.length) {
-            lines.push(`    Source: ${attachment.variant.url}`);
-          } else {
-            for (const { asset, assetIndex } of matchedAssets) {
-              const mediaStatus = mediaStatuses?.[assetIndex];
-              const statusText = mediaStatus ? mediaStatus.included ? 'included' : 'not bundled; source blocked' : 'highest-quality file';
-              const size = asset.variant.width && asset.variant.height ? ` (${asset.variant.width} × ${asset.variant.height})` : '';
-              lines.push(`    ${assetRole(asset)}: ${mediaFilename(asset)}${size} — ${statusText}`);
-              lines.push(`      Source: ${asset.variant.url}`);
-              const lowerQualities = alternateVariantsForAsset(asset).map(({ variant, qualityIndex }) => ({
-                fileName: qualityFilename(asset, variant, qualityIndex), variant, qualityIndex
-              }));
-              for (const quality of lowerQualities) {
-                const qualityStatus = qualityStatuses?.find((status) => status.assetIndex === assetIndex && status.qualityIndex === quality.qualityIndex);
-                const qualityResult = qualityStatus ? qualityStatus.included ? 'included' : 'not bundled; source blocked' : 'available in package';
-                const qualitySize = quality.variant.width && quality.variant.height ? ` (${quality.variant.width} × ${quality.variant.height})` : '';
-                lines.push(`      Lower quality: ${quality.fileName}${qualitySize} — ${qualityResult}`);
-              }
-            }
-          }
-        });
-      }
-
-      const extraFields = post.instagramFields ?? {};
-      if (Object.keys(extraFields).length) {
-        lines.push('ADDITIONAL GRAPHQL FIELDS');
-        for (const [field, value] of Object.entries(extraFields)) addReportField(lines, field, value);
-      }
-      lines.push('');
-    });
-    lines.push('MENTION INDEX');
-    lines.push([...data.mentionCounts.entries()].map(([name, count]) => `@${name}${count > 1 ? ` (${count} items)` : ''}`).join(', ') || 'None found');
-    lines.push('', 'HASHTAG INDEX');
-    lines.push([...data.hashtagCounts.keys()].map((tag) => `#${tag}`).join(', ') || 'None found');
-    lines.push('', 'ABOUT THIS REPORT', 'Only fields included in the supplied GraphQL response can be extracted. This report was generated locally in your browser.');
-    return lines.join('\n');
-  }
-
   function downloadReport() {
     if (!extracted) return;
-    const blob = new Blob([textReport(extracted)], { type: 'text/plain;charset=utf-8' });
+    renderReport(extracted);
+    const blob = new Blob([categorizedReportFromPreview(extracted)], { type: 'text/plain;charset=utf-8' });
     saveBlob(blob, reportFilename(extracted));
     notify('Categorized report downloaded.');
   }
@@ -1420,7 +1382,8 @@
     }
     try {
       const metadata = metadataDocument(extracted, mediaStatuses, qualityStatuses);
-      const report = textReport(extracted, mediaStatuses, qualityStatuses);
+      renderReport(extracted, mediaStatuses, qualityStatuses);
+      const report = categorizedReportFromPreview(extracted);
       const mediaLinks = extracted.assets.map((media, index) => {
         const status = mediaStatuses[index]?.included ? 'INCLUDED' : 'NOT BUNDLED — source blocked browser access';
         return `${String(index + 1).padStart(2, '0')}. ${status}\nFile: ${mediaFilename(media)}\nSource: ${media.variant.url}`;
