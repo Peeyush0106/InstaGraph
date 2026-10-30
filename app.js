@@ -466,6 +466,16 @@
     return times;
   }
 
+  function mediaCandidatesForResponse(json, allCandidates) {
+    const activeReels = json?.data?.reels_media ?? json?.reels_media;
+    if (!Array.isArray(activeReels) || !activeReels.length) return allCandidates;
+
+    // reels_media is the active viewer collection; the rest of a highlight/profile response
+    // can also contain media cards for other highlights, which are not part of this selection.
+    const selectedCandidates = allObjects(activeReels).filter(hasMedia);
+    return selectedCandidates.length ? selectedCandidates : allCandidates;
+  }
+
   function findLocation(object) {
     const location = firstValue(object, ['location', 'place', 'venue']);
     if (!isObject(location)) return '';
@@ -694,7 +704,7 @@
 
   function extract(json) {
     const objects = allObjects(json);
-    const candidates = objects.filter(hasMedia);
+    const candidates = mediaCandidatesForResponse(json, objects.filter(hasMedia));
     const storyContextTimes = collectStoryContextTimes(json, objects, candidates);
     const storyFeedContexts = storyFeedMediaContexts(json);
     const responseType = detectType(json, objects);
