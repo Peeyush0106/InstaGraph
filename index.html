@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f6f6f2">
   <meta name="description" content="Extract Instagram media and organized details from a GraphQL JSON response, right in your browser.">
   <title>InstaGraph — response extractor</title>
-  <link rel="stylesheet" href="styles.css?v=20261031-1">
+  <link rel="stylesheet" href="styles.css?v=20261031-2">
 </head>
 <body>
   <div class="app-shell">
@@ -48,9 +48,10 @@
       <section class="results-section" id="results" hidden aria-live="polite">
         <div class="results-heading">
           <div><div class="step-label"><span>02</span><span class="step-rule"></span><span>EXTRACTION</span></div><h2>Your files are ready<span class="period">.</span></h2><p id="result-summary" class="results-subtitle"></p></div>
-          <div class="result-actions">
-            <div class="report-download"><span class="report-file-icon">TXT</span><div class="report-file-copy"><strong>Categorized report</strong><span>.txt · mentions linked in preview</span></div><button id="report-button" class="button button-dark" type="button"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v10m0 0 4-4m-4 4L6 9m-2.5 5v2A1.5 1.5 0 005 17.5h10a1.5 1.5 0 001.5-1.5v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Download</button></div>
-            <button id="package-button" class="button button-primary package-button" type="button"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M2.5 5.5h6l1.5 1.7h7.5v8.3a1.5 1.5 0 01-1.5 1.5H4a1.5 1.5 0 01-1.5-1.5v-10z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 9.5v4m0 0 2-2m-2 2-2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Complete package (.zip)</span></button>
+          <div class="result-actions download-options" role="group" aria-label="Download options">
+            <button id="sequence-button" class="button button-quiet" type="button" title="Download each media file sequentially">Download media</button>
+            <button id="report-button" class="button button-dark" type="button" title="Download the categorized report"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v10m0 0 4-4m-4 4L6 9m-2.5 5v2A1.5 1.5 0 005 17.5h10a1.5 1.5 0 001.5-1.5v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Download report</button>
+            <button id="package-button" class="button button-primary package-button" type="button" title="Download the complete ZIP package"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M2.5 5.5h6l1.5 1.7h7.5v8.3a1.5 1.5 0 01-1.5 1.5H4a1.5 1.5 0 01-1.5-1.5v-10z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 9.5v4m0 0 2-2m-2 2-2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Download package</span></button>
           </div>
         </div>
 
@@ -63,7 +64,7 @@
 
         <div class="results-grid">
           <section class="media-panel panel" aria-labelledby="media-title">
-            <div class="panel-heading"><div><div class="panel-overline">ORIGINAL MEDIA</div><h3 id="media-title">Attachments</h3></div><div class="media-heading-actions"><span id="media-count" class="count-pill">0 files</span><button id="sequence-button" class="text-button" type="button" title="Save each media file one at a time">Download media <span aria-hidden="true">↗</span></button></div></div>
+            <div class="panel-heading"><div><div class="panel-overline">ORIGINAL MEDIA</div><h3 id="media-title">Attachments</h3></div><div class="media-heading-actions"><span id="media-count" class="count-pill">0 files</span></div></div>
             <p class="panel-description">Highest-resolution media files and available video thumbnails. The package also includes alternate qualities.</p>
             <div id="media-list" class="media-list"></div>
             <div id="media-empty" class="empty-media" hidden><span class="empty-glyph">◌</span><strong>No direct media URL found</strong><span>Some responses contain post details without the media source. Any available fields are still included in the report.</span></div>
