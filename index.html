@@ -51,7 +51,7 @@
           <div class="result-actions download-options" role="group" aria-label="Download options">
             <button id="sequence-button" class="button button-quiet" type="button" title="Download each media file sequentially">Download media</button>
             <button id="report-button" class="button button-dark" type="button" title="Download the categorized report"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 3v10m0 0 4-4m-4 4L6 9m-2.5 5v2A1.5 1.5 0 005 17.5h10a1.5 1.5 0 001.5-1.5v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Download report</button>
-            <button id="package-button" class="button button-primary package-button" type="button" title="Download the complete ZIP package"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M2.5 5.5h6l1.5 1.7h7.5v8.3a1.5 1.5 0 01-1.5 1.5H4a1.5 1.5 0 01-1.5-1.5v-10z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 9.5v4m0 0 2-2m-2 2-2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Download package</span></button>
+            <button id="package-button" class="button button-primary package-button" type="button" title="Download the package with selected stories"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M2.5 5.5h6l1.5 1.7h7.5v8.3a1.5 1.5 0 01-1.5 1.5H4a1.5 1.5 0 01-1.5-1.5v-10z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 9.5v4m0 0 2-2m-2 2-2-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Download package</span></button>
           </div>
         </div>
 
@@ -60,6 +60,14 @@
           <div class="stat-card"><span class="stat-kicker">MEDIA FILES</span><div><strong id="stat-assets">0</strong><span>best available variant</span></div><span class="stat-index">B</span></div>
           <div class="stat-card"><span class="stat-kicker">MENTIONS</span><div><strong id="stat-mentions">0</strong><span>unique accounts</span></div><span class="stat-index">C</span></div>
           <div class="stat-card"><span class="stat-kicker">HASHTAGS</span><div><strong id="stat-hashtags">0</strong><span>unique tags</span></div><span class="stat-index">D</span></div>
+        </div>
+
+        <div id="story-package-toolbar" class="story-package-toolbar" hidden>
+          <div><strong>Stories in package</strong><span id="story-package-count"></span></div>
+          <div class="story-package-actions">
+            <button id="select-all-stories" class="text-button" type="button">Select all</button>
+            <button id="select-no-stories" class="text-button" type="button">Clear selection</button>
+          </div>
         </div>
 
         <div id="item-list" class="item-list" aria-label="Items with media and categorized details"></div>
@@ -81,6 +89,6 @@
   </div>
   <button id="mode-toggle" class="mode-toggle" type="button" aria-pressed="false" aria-label="Switch to Pro Mode" title="Switch to Pro Mode">Pro Mode</button>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="app.js?v=20261031-8"></script>
+  <script src="app.js?v=20261104-1"></script>
 </body>
 </html>

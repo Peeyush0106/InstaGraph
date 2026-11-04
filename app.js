@@ -9,6 +9,7 @@
   const toast = $('#toast');
   const modeToggle = $('#mode-toggle');
   let extracted = null;
+  const packageStorySelection = new Map();
   let toastTimer = 0;
 
   function setProMode(enabled) {
@@ -989,6 +990,10 @@
       const category = post.family === 'story' ? 'Story' : post.family === 'reel' ? 'Reel' : 'Post';
       const title = posts.length > 1 ? `ITEM ${String(index + 1).padStart(2, '0')} / ${category}` : category;
       const pair = element('article', 'item-pair');
+      if (post.family === 'story') {
+        const storyKey = storySelectionKey(post);
+        pair.dataset.storyKey = storyKey;
+      }
       const itemMedia = element('div', 'item-media-list');
       const matchingAssetIndexes = new Set();
       for (const attachment of post.attachments) {
@@ -1011,8 +1016,23 @@
       }
       if (!itemMedia.childElementCount) itemMedia.append(element('p', 'no-value item-media-empty', 'No media preview found for this item.'));
       const section = element('section', 'report-section');
-      section.append(element('h4', '', title.toUpperCase()));
+      const sectionTitle = element('h4', '', title.toUpperCase());
+      section.append(sectionTitle);
       const lines = element('div', 'report-lines');
+      if (post.family === 'story') {
+        const storyKey = storySelectionKey(post);
+        const selectionLabel = element('label', 'story-package-toggle');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = packageStorySelection.get(storyKey) !== false;
+        checkbox.setAttribute('aria-label', `Include story ${index + 1} in package`);
+        checkbox.addEventListener('change', () => {
+          packageStorySelection.set(storyKey, checkbox.checked);
+          syncStorySelectionSummary();
+        });
+        selectionLabel.append(checkbox, element('span', '', 'Include in package'));
+        section.append(selectionLabel);
+      }
       const addLine = (label, value, kind) => {
         if (value === undefined || value === null || value === '' || (Array.isArray(value) && !value.length)) return;
         const line = element('div', 'report-line');
@@ -1142,9 +1162,67 @@
       pair.append(itemMedia);
       preview.append(pair);
     }
+    syncStorySelectionSummary();
     addReportSection(preview, 'Mention index', [['Accounts', mentionList, 'names']]);
     addReportSection(preview, 'Hashtag index', [['Tags', hashtagList]]);
     if (!posts.length && (mentionList.length || hashtagList.length)) return;
+  }
+
+  function storySelectionKey(post) {
+    const attachmentUrl = post.attachments?.[0]?.variant?.url || post.variant?.url || '';
+    const values = [post.id, post.shortcode, post.timestamp?.seconds, attachmentUrl].map(safeText).filter((value) => value && value !== 'Not provided');
+    return values.join('|') || `story-${post.author?.id || post.author?.username || 'unknown'}-${post.timestamp?.seconds || ''}`;
+  }
+
+  function syncStorySelectionSummary() {
+    const toolbar = $('#story-package-toolbar');
+    if (!toolbar) return;
+    const checkboxes = [...document.querySelectorAll('#item-list .item-pair[data-story-key] .story-package-toggle input')];
+    toolbar.hidden = checkboxes.length === 0;
+    const selected = checkboxes.filter((checkbox) => checkbox.checked).length;
+    $('#story-package-count').textContent = `${selected} of ${checkboxes.length} selected`;
+    $('#select-all-stories').disabled = selected === checkboxes.length;
+    $('#select-no-stories').disabled = selected === 0;
+  }
+
+  function buildPackageSelection(data) {
+    const stories = data.posts.filter((post) => post.family === 'story');
+    const selectedStories = stories.filter((post) => packageStorySelection.get(storySelectionKey(post)) !== false);
+    const selectedStoryKeys = new Set(selectedStories.map(storySelectionKey));
+    const posts = data.posts.filter((post) => post.family !== 'story' || selectedStoryKeys.has(storySelectionKey(post)));
+    const selectedAssetIndexes = new Set();
+    const selectedStoryFeedShortcodes = new Set();
+    for (const story of selectedStories) {
+      for (const attachment of story.attachments ?? []) {
+        const sourceIndex = mediaIndexForAttachment(data, attachment);
+        if (sourceIndex >= 0) data.assets.forEach((asset, index) => {
+          if (asset.sourceMediaIndex === sourceIndex) selectedAssetIndexes.add(index);
+        });
+      }
+      (story.storyFeedMentions ?? []).forEach((reference) => {
+        if (reference.shortcode) selectedStoryFeedShortcodes.add(reference.shortcode);
+      });
+    }
+    const assetIndexes = data.assets.map((asset, index) => ({ asset, index })).filter(({ asset, index }) => {
+      if (asset.family === 'story') return selectedAssetIndexes.has(index);
+      if (asset.storyFeedMention) return selectedStoryFeedShortcodes.has(asset.shortcode);
+      return true;
+    }).map(({ index }) => index);
+    const assets = assetIndexes.map((index) => data.assets[index]);
+    const packageData = {
+      ...data,
+      posts,
+      assets,
+      mentionCounts: new Map(),
+      hashtagCounts: new Map(),
+      includeSourceJson: selectedStories.length === stories.length,
+      selection: { selectedStoryCount: selectedStories.length, totalStoryCount: stories.length }
+    };
+    for (const post of posts) {
+      post.mentions.forEach((name) => packageData.mentionCounts.set(name, (packageData.mentionCounts.get(name) ?? 0) + 1));
+      post.hashtags.forEach((tag) => packageData.hashtagCounts.set(tag, (packageData.hashtagCounts.get(tag) ?? 0) + 1));
+    }
+    return { data: packageData, assetIndexes, stories, selectedStories };
   }
 
   function categorizedReportFromPreview(data) {
@@ -1395,7 +1473,8 @@
       generatedAt: new Date().toISOString(),
       displayTimezone: 'Asia/Kolkata',
       responseType: data.jsonType,
-      sourceJsonIncluded: true,
+      sourceJsonIncluded: data.includeSourceJson === true,
+      storySelection: data.selection ?? { selectedStoryCount: data.posts.filter((post) => post.family === 'story').length, totalStoryCount: data.posts.filter((post) => post.family === 'story').length },
       creator: data.creator ? {
         username: data.creator.username || null,
         fullName: data.creator.fullName || null,
@@ -1548,12 +1627,13 @@
 
   async function downloadPackage() {
     if (!extracted) return;
+    const { data: packageData, stories, selectedStories } = buildPackageSelection(extracted);
     const button = $('#package-button');
     button.disabled = true;
     const label = button.querySelector('span');
     const oldText = label.textContent;
     const mediaStatuses = [];
-    const qualityAssets = extracted.assets.flatMap((asset, assetIndex) => alternateVariantsForAsset(asset).map(({ variant, qualityIndex }) => ({
+    const qualityAssets = packageData.assets.flatMap((asset, assetIndex) => alternateVariantsForAsset(asset).map(({ variant, qualityIndex }) => ({
       assetIndex,
       variant,
       qualityIndex,
@@ -1562,8 +1642,8 @@
     })));
     const qualityStatuses = [];
     const files = [];
-    for (const [index, media] of extracted.assets.entries()) {
-      label.textContent = `Fetching media ${index + 1}/${extracted.assets.length}…`;
+    for (const [index, media] of packageData.assets.entries()) {
+      label.textContent = `Fetching media ${index + 1}/${packageData.assets.length}…`;
       try {
         const blob = await fetchMedia(media);
         files.push({ name: mediaFilename(media), blob });
@@ -1575,7 +1655,7 @@
     for (const [index, quality] of qualityAssets.entries()) {
       label.textContent = `Fetching lower quality ${index + 1}/${qualityAssets.length}…`;
       try {
-        const asset = extracted.assets[quality.assetIndex];
+        const asset = packageData.assets[quality.assetIndex];
         const blob = await fetchMedia({ ...asset, variant: quality.variant });
         files.push({ name: quality.fileName, blob });
         qualityStatuses.push({ ...quality, included: true });
@@ -1584,10 +1664,11 @@
       }
     }
     try {
-      const metadata = metadataDocument(extracted, mediaStatuses, qualityStatuses);
-      renderReport(extracted, mediaStatuses, qualityStatuses);
-      const report = categorizedReportFromPreview(extracted);
-      const mediaLinks = extracted.assets.map((media, index) => {
+      const metadata = metadataDocument(packageData, mediaStatuses, qualityStatuses);
+      renderReport(packageData, mediaStatuses, qualityStatuses);
+      const report = categorizedReportFromPreview(packageData);
+      renderReport(extracted);
+      const mediaLinks = packageData.assets.map((media, index) => {
         const status = mediaStatuses[index]?.included ? 'INCLUDED' : 'NOT BUNDLED — source blocked browser access';
         return `${String(index + 1).padStart(2, '0')}. ${status}\nFile: ${mediaFilename(media)}\nSource: ${media.variant.url}`;
       });
@@ -1596,20 +1677,19 @@
         return `${String(index + 1).padStart(2, '0')}. ${status}\nFile: ${quality.fileName}\nSource: ${quality.sourceUrl}`;
       });
       const sourceLinks = [...mediaLinks, ...qualityLinks].join('\n\n') || 'No media files were found in this response.';
-      const rawJson = extracted.rawJsonText || '{}';
       files.push(
         { name: 'metadata/categorized-report.txt', blob: new Blob([report], { type: 'text/plain;charset=utf-8' }) },
         { name: 'metadata/metadata.json', blob: new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json;charset=utf-8' }) },
-        { name: 'metadata/graphql-response.json', blob: new Blob([rawJson], { type: 'application/json;charset=utf-8' }) },
         { name: 'metadata/media-source-links.txt', blob: new Blob([sourceLinks], { type: 'text/plain;charset=utf-8' }) }
       );
+      if (packageData.includeSourceJson) files.push({ name: 'metadata/graphql-response.json', blob: new Blob([extracted.rawJsonText || '{}'], { type: 'application/json;charset=utf-8' }) });
       label.textContent = 'Building package…';
       const zip = await zipBlob(files);
-      saveBlob(zip, packageFilename(extracted));
+      saveBlob(zip, packageFilename(packageData));
       const bundled = mediaStatuses.filter((status) => status.included).length;
       const bundledQualities = qualityStatuses.filter((status) => status.included).length;
       const blocked = mediaStatuses.length + qualityStatuses.length - bundled - bundledQualities;
-      notify(`Complete package downloaded with ${bundledQualities} alternate quality file${bundledQualities === 1 ? '' : 's'}${blocked ? `; ${blocked} media source${blocked === 1 ? '' : 's'} could not be fetched` : ''}.`);
+      notify(`Package downloaded with ${selectedStories.length} of ${stories.length} stories${blocked ? `; ${blocked} media source${blocked === 1 ? '' : 's'} could not be fetched` : ''}.`);
     } catch (error) {
       showError(`The package could not be created. ${error.message || 'The response may be too large for this browser.'}`);
     } finally {
@@ -1636,6 +1716,7 @@
     try { json = JSON.parse(raw); }
     catch (error) { showError(`This is not valid JSON. ${error.message}`); return; }
     if (!isObject(json)) { showError('The JSON root must be an object or array.'); return; }
+    packageStorySelection.clear();
     extracted = extract(json);
     extracted.rawJsonText = input.value;
     renderReport(extracted);
@@ -1665,8 +1746,22 @@
   $('#report-button').addEventListener('click', downloadReport);
   $('#package-button').addEventListener('click', downloadPackage);
   $('#sequence-button').addEventListener('click', downloadMediaSequentially);
+  $('#select-all-stories').addEventListener('click', () => {
+    document.querySelectorAll('#item-list .item-pair[data-story-key]').forEach((pair) => {
+      const checkbox = pair.querySelector('.story-package-toggle input');
+      if (checkbox) { checkbox.checked = true; packageStorySelection.set(pair.dataset.storyKey, true); }
+    });
+    syncStorySelectionSummary();
+  });
+  $('#select-no-stories').addEventListener('click', () => {
+    document.querySelectorAll('#item-list .item-pair[data-story-key]').forEach((pair) => {
+      const checkbox = pair.querySelector('.story-package-toggle input');
+      if (checkbox) { checkbox.checked = false; packageStorySelection.set(pair.dataset.storyKey, false); }
+    });
+    syncStorySelectionSummary();
+  });
   $('#clear-button').addEventListener('click', () => {
-    input.value = ''; fileInput.value = ''; extracted = null; clearError(); $('#results').hidden = true;
+    input.value = ''; fileInput.value = ''; extracted = null; packageStorySelection.clear(); clearError(); $('#results').hidden = true;
     $('#file-label').textContent = 'Your JSON stays on this device. Nothing is uploaded.'; input.focus();
   });
   fileInput.addEventListener('change', () => loadFile(fileInput.files?.[0]));
